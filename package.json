@@ -1,0 +1,17 @@
+{
+  "name": "wattmatch-sender",
+  "version": "1.0.0",
+  "description": "Team bulk outreach sender: Sign in with Google, upload an Excel sheet, send personalised emails from your own Gmail.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node test.js" },
+  "engines": { "node": "22.x" },
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "cookie-session": "^2.1.0",
+    "express": "^4.21.0",
+    "googleapis": "^144.0.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.15",
+    "xlsx": "^0.18.5"
+  }
+}
