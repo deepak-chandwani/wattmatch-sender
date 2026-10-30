@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WattMatch Sender</title>
+<style>
+:root{--bg:#f5f7f6;--card:#fff;--ink:#16211d;--muted:#5d6b66;--line:#dfe6e2;--brand:#0f7b4f;--brand-d:#0a5d3b;--warn:#b26a00;--err:#b3261e;--ok:#0f7b4f;--field:#fbfcfb}
+@media (prefers-color-scheme:dark){:root{--bg:#101513;--card:#171e1b;--ink:#e8efec;--muted:#98a8a1;--line:#2a3531;--brand:#34b27b;--brand-d:#2a9a68;--warn:#e0a040;--err:#f0776f;--ok:#4cc38a;--field:#131916}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header h1{font-size:17px;margin:0;flex:1}
+header .who{color:var(--muted);font-size:13px}
+main{max-width:1050px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.card h2{margin:0 0 4px;font-size:16px}
+.card p.hint{margin:0 0 12px;color:var(--muted);font-size:13px}
+label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
+input[type=text],textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--field);color:var(--ink);font:inherit}
+textarea{min-height:300px;resize:vertical;line-height:1.45;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+button{font:inherit;cursor:pointer;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px}
+button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+button.primary:hover{background:var(--brand-d)}
+button.danger{border-color:var(--err);color:var(--err)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.tabs{display:flex;gap:4px;margin-bottom:12px}
+.tabs button{border-radius:7px 7px 0 0}
+.tabs button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--muted);cursor:pointer}
+.drop.over{border-color:var(--brand);color:var(--brand)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;position:sticky;top:50px;background:var(--card)}
+.tablewrap{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+tr.sel{background:color-mix(in srgb,var(--brand) 10%,transparent)}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;border:1px solid var(--line)}
+.b-ready{color:var(--ok);border-color:var(--ok)}.b-warn{color:var(--warn);border-color:var(--warn)}.b-err{color:var(--err);border-color:var(--err)}
+.preview{border:1px solid var(--line);border-radius:8px;padding:14px;background:#fff;color:#202124;max-height:420px;overflow:auto}
+.pv-subj{font-weight:600;margin-bottom:10px;color:#202124}
+.msg{padding:10px 12px;border-radius:8px;margin-bottom:12px;background:color-mix(in srgb,var(--warn) 14%,transparent);border:1px solid var(--warn)}
+.login{max-width:420px;margin:12vh auto;text-align:center}
+.login h1{margin:0 0 6px}.login p{color:var(--muted)}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;width:0;background:var(--brand);transition:width .3s}
+small.m{color:var(--muted)}
+.ph{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--field);border:1px solid var(--line);border-radius:5px;padding:1px 5px;cursor:pointer}
+
+.ov{position:fixed;inset:0;background:rgba(10,18,14,.62);display:flex;align-items:center;justify-content:center;z-index:50;padding:12px}
+.guide{background:var(--card);border-radius:14px;max-width:720px;width:100%;max-height:94vh;overflow:auto;border:1px solid var(--line);display:flex;flex-direction:column}
+.g-top{padding:14px 18px 0;display:flex;align-items:center;gap:10px}
+.dots{display:flex;gap:6px;flex:1}.dots i{height:6px;flex:1;border-radius:3px;background:var(--line)}.dots i.on{background:var(--brand)}
+.g-body{padding:10px 20px 6px;min-height:380px}
+.g-body h2{margin:6px 0 4px;font-size:20px}.g-body p{margin:0 0 10px;color:var(--muted)}
+.g-foot{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--line);align-items:center}
+.g-foot .sp{flex:1}
+.stage{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:14px;margin:8px 0 10px;overflow:hidden}
+@keyframes pop{0%{opacity:0;transform:translateY(8px) scale(.94)}100%{opacity:1;transform:none}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--brand) 55%,transparent)}50%{box-shadow:0 0 0 8px transparent}}
+@keyframes fillbar{from{width:0}to{width:100%}}
+@keyframes blink{50%{opacity:0}}
+@keyframes slide{0%{opacity:0;transform:translateX(-24px)}100%{opacity:1;transform:none}}
+@keyframes flip{0%,45%{opacity:1}50%,95%{opacity:0}100%{opacity:0}}
+@keyframes flop{0%,45%{opacity:0}50%,100%{opacity:1}}
+.pop{opacity:0;animation:pop .5s ease forwards}
+.flow{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap}
+.node{flex:1;min-width:120px;text-align:center;border:1px solid var(--line);border-radius:10px;padding:12px 6px;background:var(--card)}
+.node b{display:block;font-size:22px}.node small{color:var(--muted)}
+.arrow{font-size:20px;color:var(--brand)}
+.gt{border-collapse:collapse;width:100%;font-size:12.5px}
+.gt th,.gt td{border:1px solid var(--line);padding:5px 7px;text-align:left;white-space:nowrap}
+.gt th{background:color-mix(in srgb,var(--brand) 14%,var(--card));position:static}
+.req{display:block;font-size:10px;font-weight:700;color:var(--err)}.opt{display:block;font-size:10px;color:var(--muted);font-weight:400}.rec{display:block;font-size:10px;color:var(--warn);font-weight:700}
+.scroll{overflow:auto}
+.mail{background:#fff;color:#202124;border-radius:8px;padding:12px 14px;font-size:13.5px;line-height:1.5;border:1px solid var(--line)}
+.type{border-right:2px solid #202124;white-space:nowrap;overflow:hidden;display:inline-block;vertical-align:bottom;animation:typing 2.4s steps(30) forwards,blink .7s step-end infinite;width:0}
+@keyframes typing{to{width:100%}}
+.swap{position:relative;display:inline-block;min-width:90px}
+.swap .a{animation:flip 4s infinite;color:#b3261e;font-family:ui-monospace,monospace}
+.swap .b{position:absolute;left:0;top:0;animation:flop 4s infinite;color:#0f7b4f;font-weight:700;white-space:nowrap}
+.ck{display:flex;align-items:center;gap:8px;padding:4px 0}
+.tick{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex:none}
+.tick.y{background:var(--ok);border-color:var(--ok)}
+.pulse{animation:pulse 1.6s infinite}
+.mini{height:10px;background:var(--line);border-radius:5px;overflow:hidden}.mini i{display:block;height:100%;background:var(--brand);width:0;animation:fillbar 5s linear infinite}
+.chk{background:color-mix(in srgb,var(--brand) 8%,var(--card));border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.chk .row{margin-top:2px}
+@media (prefers-reduced-motion:reduce){.pop,.pulse,.type,.mini i,.swap .a,.swap .b{animation:none!important;opacity:1;width:auto}.swap .a{display:none}.swap .b{position:static}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const api = async (url, opts = {}) => {
+  const r = await fetch(url, { headers: opts.body && !(opts.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}, ...opts, body: opts.body instanceof FormData ? opts.body : opts.body ? JSON.stringify(opts.body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || r.statusText); e.status = r.status; e.data = j; throw e; }
+  return j;
+};
+let ME = null, ROWS = [], SEL = new Set(), CURRENT = 0, RUN = { on: false, stop: false };
+
+async function boot() {
+  ME = await api('/api/me');
+  ME.signedIn ? renderMain() : renderLogin();
+}
+function renderLogin() {
+  const msg = new URLSearchParams(location.search).get('msg');
+  $('#app').innerHTML = `<div class="login card"><h1>WattMatch Sender</h1>
+    <p>Send personalised outreach emails from your own Gmail. Upload your Excel sheet, check the preview, and send.</p>
+    ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}
+    <a href="/auth/google"><button class="primary" style="padding:10px 20px;font-size:15px">Sign in with Google</button></a>
+    <p style="font-size:12px;margin-top:16px">Google will ask permission to <b>send email on your behalf</b>. This site cannot read your inbox.</p></div>`;
+}
+function renderMain() {
+  $('#app').innerHTML = `
+  <header><h1>WattMatch Sender</h1><span class="who">${esc(ME.email)} · <span id="cnt">${ME.sentToday}</span>/${ME.dailyLimit} sent in last 24h</span><button id="help">How to use</button><button id="out">Sign out</button></header>
+  <main>
+   <div class="tabs"><button id="t1" class="on">Send emails</button><button id="t2">Team sent log</button></div>
+   <div id="pg1">
+    <div class="chk" id="chk"></div>
+    <div class="card"><h2>1. Your signature</h2><p class="hint">Added at the end of every email you send. Saved for you only.</p>
+      <div class="grid"><div><label>Name</label><input type="text" id="sn" value="${esc(ME.sig.name)}"></div>
+      <div><label>Designation</label><input type="text" id="st" value="${esc(ME.sig.title)}" placeholder="e.g. C&I Renewable Consultant"></div>
+      <div><label>Phone</label><input type="text" id="sp" value="${esc(ME.sig.phone)}" placeholder="+91 ..."></div></div>
+      <div class="row"><button id="savesig">Save signature</button><small class="m" id="sigmsg"></small></div></div>
+
+    <div class="card"><h2>2. Email template</h2><p class="hint">Use placeholders: <span class="ph">{name}</span> <span class="ph">{company}</span> <span class="ph">{short}</span> <span class="ph">{intro}</span>. If a row has no intro, the {intro} line is skipped. Lines starting with * become bullets; [text](link) makes a link.</p>
+      <label>Subject</label><input type="text" id="subj" value="${esc(ME.subject)}">
+      <label>Body (without signature)</label><textarea id="body">${esc(ME.body)}</textarea>
+      <div class="row"><button id="savetpl">Save template</button><button id="resettpl">Reset to default</button><small class="m" id="tplmsg"></small></div></div>
+
+    <div class="card"><h2>3. Upload your sheet</h2><p class="hint">Excel (.xlsx) or CSV. Columns: <b>Email</b>, <b>Name</b> (full name, used after “Dear”), <b>Company</b>. Optional: Designation, Short name, Intro, CC.</p>
+      <div class="drop" id="drop">Click to choose a file or drop it here</div><input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+      <div id="mapinfo" class="hint" style="margin-top:10px"></div>
+      <div id="tbl"></div></div>
+
+    <div class="card" id="sendcard" style="display:none"><h2>4. Preview and send</h2>
+      <div id="pv" class="preview"></div>
+      <div class="row"><button id="test">Send a test to myself</button><small class="m">Uses the row highlighted above. Not logged as outreach.</small></div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+      <div class="row"><button class="primary" id="go">Send selected emails</button><button class="danger" id="stop" style="display:none">Stop</button>
+        <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="force"> also send to people already emailed by the team</label></div>
+      <div class="bar"><i id="barfill"></i></div><div id="runmsg" class="hint" style="margin-top:8px"></div></div>
+   </div>
+   <div id="pg2" style="display:none"><div class="card"><div class="row" style="margin:0 0 10px"><label style="margin:0"><input type="checkbox" id="mine"> only mine</label><a href="/api/log.xlsx"><button>Download Excel</button></a></div><div id="logtbl" class="tablewrap"></div></div></div>
+  </main>`;
+  $('#help').onclick = () => openGuide(0);
+  $('#out').onclick = async () => { await api('/auth/logout', { method: 'POST' }); location.href = '/'; };
+  $('#t1').onclick = () => tab(1); $('#t2').onclick = () => { tab(2); loadLog(); };
+  $('#mine').onchange = loadLog;
+  $('#savesig').onclick = async () => { await api('/api/profile', { method: 'PUT', body: { name: $('#sn').value, title: $('#st').value, phone: $('#sp').value } }); ME.sig = { ...ME.sig, name: $('#sn').value, title: $('#st').value, phone: $('#sp').value }; $('#sigmsg').textContent = 'Saved'; preview(); updateChecklist(); };
+  $('#savetpl').onclick = async () => { try { await api('/api/template', { method: 'PUT', body: { subject: $('#subj').value, body: $('#body').value } }); $('#tplmsg').textContent = 'Saved'; preview(); } catch (e) { $('#tplmsg').textContent = e.message; } };
+  $('#resettpl').onclick = async () => { if (!confirm('Replace your template with the default?')) return; const t = await api('/api/template/reset', { method: 'POST' }); $('#subj').value = t.subject; $('#body').value = t.body; preview(); };
+  $('#subj').oninput = $('#body').oninput = debounce(preview, 400);
+  const drop = $('#drop'), file = $('#file');
+  drop.onclick = () => file.click();
+  file.onchange = () => file.files[0] && uploadFile(file.files[0]);
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files[0] && uploadFile(e.dataTransfer.files[0]); };
+  $('#test').onclick = testSend; updateChecklist(); if (!ME.onboarded) openGuide(0, true);
+   $('#go').onclick = runSend; $('#stop').onclick = () => { RUN.stop = true; $('#stop').disabled = true; };
+}
+function tab(n) { $('#pg1').style.display = n === 1 ? '' : 'none'; $('#pg2').style.display = n === 2 ? '' : 'none'; $('#t1').classList.toggle('on', n === 1); $('#t2').classList.toggle('on', n === 2); }
+function debounce(f, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => f(...a), ms); }; }
+
+async function uploadFile(f) {
+  const fd = new FormData(); fd.append('file', f);
+  $('#drop').textContent = 'Reading ' + f.name + '…';
+  try {
+    const r = await api('/api/upload', { method: 'POST', body: fd });
+    ROWS = r.rows; SEL = new Set(); CURRENT = 0;
+    ROWS.forEach((x, i) => { x.status = x.issues.length ? 'issue' : x.contacted && x.contacted.level === 'email' ? 'dup' : 'ready'; if (x.status === 'ready') SEL.add(i); });
+    $('#drop').textContent = `${f.name} · ${ROWS.length} rows. Click to choose another file.`;
+    $('#mapinfo').innerHTML = (r.warnings.map(w => `<div class="msg">${esc(w)}</div>`).join('')) + `Sheet “${esc(r.sheet)}”. Read: ` + Object.entries(r.mapping).map(([k, v]) => `${k} ← ${esc(v)}`).join(' · ');
+    drawTable(); $('#sendcard').style.display = ROWS.length ? '' : 'none'; preview(); updateChecklist();
+  } catch (e) { $('#drop').textContent = e.message; }
+}
+function badge(x) {
+  if (x.status === 'sent') return '<span class="badge b-ready">Sent</span>';
+  if (x.status === 'failed') return `<span class="badge b-err" title="${esc(x.err || '')}">Failed</span>`;
+  if (x.status === 'sending') return '<span class="badge b-warn">Sending…</span>';
+  if (x.status === 'issue') return `<span class="badge b-err">${esc(x.issues.join(', '))}</span>`;
+  if (x.status === 'dup') return `<span class="badge b-warn">Already emailed by ${esc(x.contacted.by)}</span>`;
+  if (x.contacted && x.contacted.level === 'company') return `<span class="badge b-warn" title="${esc(x.contacted.to || '')}">Company contacted by ${esc(x.contacted.by)}</span>`;
+  if (!x.intro) return '<span class="badge b-warn">No intro</span>';
+  return '<span class="badge b-ready">Ready</span>';
+}
+function drawTable() {
+  $('#tbl').innerHTML = `<div class="row" style="margin:8px 0"><button id="selall">Select all ready</button><button id="selnone">Clear</button><small class="m" id="selcnt"></small></div>
+  <div class="tablewrap"><table><thead><tr><th></th><th>#</th><th>Name</th><th>Company</th><th>Email</th><th>Status</th></tr></thead><tbody>${ROWS.map((x, i) => `<tr data-i="${i}" class="${i === CURRENT ? 'sel' : ''}"><td><input type="checkbox" ${SEL.has(i) ? 'checked' : ''} ${x.status === 'issue' ? 'disabled' : ''}></td><td>${x.row}</td><td>${esc(x.name) || '<small class="m">Sir/Madam</small>'}<br><small class="m">${esc(x.designation)}</small></td><td>${esc(x.company)}</td><td>${esc(x.email)}</td><td>${badge(x)}</td></tr>`).join('')}</tbody></table></div>`;
+  $('#selall').onclick = () => { ROWS.forEach((x, i) => { if (x.status === 'ready') SEL.add(i); }); drawTable(); };
+  $('#selnone').onclick = () => { SEL.clear(); drawTable(); };
+  $('#tbl tbody').onclick = e => { const tr = e.target.closest('tr'); if (!tr) return; const i = +tr.dataset.i;
+    if (e.target.type === 'checkbox') { e.target.checked ? SEL.add(i) : SEL.delete(i); count(); } else { CURRENT = i; document.querySelectorAll('#tbl tbody tr').forEach(r => r.classList.toggle('sel', +r.dataset.i === i)); preview(); } };
+  count();
+}
+function count() { const el = $('#selcnt'); if (el) el.textContent = SEL.size + ' selected'; $('#go').textContent = `Send ${SEL.size} selected email${SEL.size === 1 ? '' : 's'}`; }
+async function preview() {
+  if (!ROWS.length) return;
+  const p = await api('/api/preview', { method: 'POST', body: { row: ROWS[CURRENT], subject: $('#subj').value, body: $('#body').value } });
+  $('#pv').innerHTML = `<div class="pv-subj">To: ${esc(ROWS[CURRENT].email)}<br>Subject: ${esc(p.subject)}</div>${p.html}`;
+}
+async function testSend() {
+  $('#test').disabled = true;
+  try { await api('/api/test-send', { method: 'POST', body: { row: ROWS[CURRENT], subject: $('#subj').value, body: $('#body').value } }); $('#runmsg').textContent = 'Test sent to ' + ME.email + '. Check your inbox.'; DONE.test = true; updateChecklist(); }
+  catch (e) { $('#runmsg').textContent = 'Test failed: ' + e.message; }
+  $('#test').disabled = false;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function runSend() {
+  const idx = [...SEL].filter(i => ROWS[i].status !== 'issue');
+  if (!idx.length) return;
+  if (!confirm(`Send ${idx.length} emails from ${ME.email}? About ${Math.ceil(idx.length * ME.delay / 60)} minutes (a short pause between emails keeps Gmail happy). Keep this tab open.`)) return;
+  await api('/api/template', { method: 'PUT', body: { subject: $('#subj').value, body: $('#body').value } });
+  RUN = { on: true, stop: false }; $('#go').disabled = true; $('#stop').style.display = ''; $('#stop').disabled = false;
+  let done = 0, ok = 0, bad = 0;
+  for (const i of idx) {
+    if (RUN.stop) break;
+    const x = ROWS[i]; x.status = 'sending'; drawTable();
+    try {
+      await api('/api/send', { method: 'POST', body: { row: x, subject: $('#subj').value, body: $('#body').value, force: $('#force').checked } });
+      x.status = 'sent'; ok++; SEL.delete(i);
+    } catch (e) {
+      if (e.status === 409) { x.status = 'dup'; x.contacted = { level: 'email', by: (e.message.match(/by (\S+)/) || [])[1] || 'team' }; } else { x.status = 'failed'; x.err = e.message; bad++; }
+      if (e.data && e.data.stop) { $('#runmsg').textContent = e.message; drawTable(); break; }
+    }
+    done++; $('#barfill').style.width = (done / idx.length * 100) + '%';
+    $('#runmsg').textContent = `${ok} sent, ${bad} failed, ${idx.length - done} to go…`; $('#cnt').textContent = (+$('#cnt').textContent) + (x.status === 'sent' ? 1 : 0);
+    drawTable();
+    if (done < idx.length && !RUN.stop) await sleep(ME.delay * 1000 * (0.8 + Math.random() * 0.4));
+  }
+  ME.sentToday += ok; updateChecklist();
+  RUN.on = false; $('#go').disabled = false; $('#stop').style.display = 'none';
+  $('#runmsg').textContent = `Finished: ${ok} sent, ${bad} failed${RUN.stop ? ' (stopped)' : ''}.`; drawTable();
+}
+async function loadLog() {
+  const r = await api('/api/log' + ($('#mine').checked ? '?mine=1' : ''));
+  $('#logtbl').innerHTML = `<table><thead><tr><th>Sent (UTC)</th><th>By</th><th>Company</th><th>Contact</th><th>Email</th><th>Status</th></tr></thead><tbody>${r.rows.map(x => `<tr><td>${esc(x.sent_at)}</td><td>${esc(x.user_email)}</td><td>${esc(x.company)}</td><td>${esc(x.contact)}</td><td>${esc(x.to_email)}</td><td>${esc(x.status)}${x.error ? ' – ' + esc(x.error) : ''}</td></tr>`).join('') || '<tr><td colspan=6>Nothing sent yet.</td></tr>'}</tbody></table>`;
+}
+
+/* ---------- checklist ---------- */
+const DONE = { sig: false, upload: false, test: false };
+function updateChecklist() {
+  const el = $('#chk'); if (!el) return;
+  const sigOk = !!(ME.sig.name && ME.sig.title);
+  const items = [[sigOk, 'Signature saved', 'Step 1 below'], [ROWS.length > 0, 'Sheet uploaded', 'Step 3 below'], [DONE.test, 'Test email sent to yourself', 'Step 4 below'], [ME.sentToday > 0, 'First real emails sent', 'Step 4 below']];
+  const n = items.filter(i => i[0]).length;
+  el.innerHTML = `<b>Your setup: ${n} of ${items.length} done</b> <small class="m">· <a href="#" id="again">watch the 2-minute guide again</a></small>` + items.map(i => `<div class="ck"><span class="tick ${i[0] ? 'y' : ''}">${i[0] ? '✓' : ''}</span><span>${i[1]}</span> <small class="m">${i[0] ? '' : i[2]}</small></div>`).join('');
+  const a = $('#again'); if (a) a.onclick = e => { e.preventDefault(); openGuide(0); };
+}
+
+/* ---------- guided tour ---------- */
+const TOUR = [
+  { t: 'Welcome. Here is how this works', render: () => `
+      <p>You will send personalised emails to a list of companies, <b>from your own Gmail</b>. It takes four steps. This guide shows each one, about 2 minutes.</p>
+      <div class="stage"><div class="flow">
+        ${[['📄', '1. Your sheet', 'Excel list of contacts'], ['✍️', '2. Template', 'One email, filled per company'], ['👀', '3. Preview', 'Check before sending'], ['🚀', '4. Send', 'One by one, from your Gmail']].map((n, i) => `<div class="node pop" style="animation-delay:${i * .6}s"><b>${n[0]}</b>${n[1]}<br><small>${n[2]}</small></div>${i < 3 ? `<span class="arrow pop" style="animation-delay:${i * .6 + .3}s">→</span>` : ''}`).join('')}
+      </div></div>
+      <p>Nothing is sent until you press <b>Send</b>. You can send yourself a test first, and stop at any time.</p>` },
+
+  { t: 'Set up your signature', render: () => `
+      <p>This goes at the end of every email you send. It is saved for you only.</p>
+      <div class="grid"><div><label>Your name</label><input type="text" id="gn" value="${esc(ME.sig.name)}"></div>
+        <div><label>Designation</label><input type="text" id="gt" value="${esc(ME.sig.title)}" placeholder="e.g. C&I Renewable Consultant"></div>
+        <div><label>Phone</label><input type="text" id="gp" value="${esc(ME.sig.phone)}" placeholder="+91 ..."></div></div>
+      <div class="stage"><div class="mail pop"><div>…Please refer to our company profile for more details.</div><br>
+        <div><b>Regards,</b></div><div id="sg1">${esc(ME.sig.name) || 'Your name'}</div><div id="sg2">${esc(ME.sig.title) || 'Your designation'}</div><div id="sg3">${ME.sig.phone ? 'M: ' + esc(ME.sig.phone) : 'M: your phone'}</div><div>E: ${esc(ME.email)}</div><div>W: https://www.wattmatch.in/</div></div></div>
+      <small class="m">The preview updates as you type. Your email address comes from your Google sign-in.</small>`,
+    after: () => { const m = { gn: 'sg1', gt: 'sg2', gp: 'sg3' }; Object.keys(m).forEach(k => $('#' + k).oninput = e => { $('#' + m[k]).textContent = (k === 'gp' ? 'M: ' : '') + (e.target.value || (k === 'gn' ? 'Your name' : k === 'gt' ? 'Your designation' : 'your phone')); }); },
+    leave: async () => { const sig = { name: $('#gn').value, title: $('#gt').value, phone: $('#gp').value }; await api('/api/profile', { method: 'PUT', body: sig }); ME.sig = { ...ME.sig, ...sig }; ['sn', 'st', 'sp'].forEach((id, i) => { const el = $('#' + id); if (el) el.value = Object.values(sig)[i]; }); updateChecklist(); } },
+
+  { t: 'Prepare your Excel sheet', render: () => `
+      <p>One row per person. The <b>first row must be headers</b> with exactly these names (capital letters do not matter):</p>
+      <div class="stage scroll"><table class="gt"><thead><tr>
+        ${[['Email', 'req', 'REQUIRED'], ['Name', 'rec', 'RECOMMENDED'], ['Company', 'req', 'REQUIRED'], ['Designation', 'opt', 'optional'], ['Short name', 'opt', 'optional'], ['Intro', 'opt', 'optional'], ['CC', 'opt', 'optional']].map((c, i) => `<th class="pop" style="animation-delay:${i * .45}s">${c[0]}<span class="${c[1]}">${c[2]}</span></th>`).join('')}</tr></thead>
+        <tbody>${[['asha.rao@acme.com', 'Asha Rao', 'Acme Cements Limited', 'CFO', 'Acme Cements', 'We understand that Acme runs a 3 MTPA plant…', ''], ['bhavin@betasteel.in', 'Bhavin Shah', 'Beta Steel Pvt Ltd', 'MD', '', '', '']].map((r, ri) => `<tr class="pop" style="animation-delay:${3.4 + ri * .5}s">${r.map(c => `<td>${esc(c) || '<small class="m">(empty is fine)</small>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px 16px;font-size:13px">
+        <div><b>Email</b>: where the email goes. Must be valid.</div><div><b>Name</b>: full name, used after “Dear”. Empty becomes “Dear Sir/Madam”.</div>
+        <div><b>Company</b>: used in the email text.</div><div><b>Short name</b>: used in the subject. Empty = Company without “Limited / Pvt Ltd”.</div>
+        <div><b>Intro</b>: one paragraph about that company. Empty = paragraph skipped.</div><div><b>CC</b>: anyone to copy on that email.</div></div>
+      <p style="margin-top:10px">Tip: a tab called <b>Hold</b> is ignored, handy for contacts you are not ready to email.</p>
+      <a href="/api/sample.xlsx"><button class="primary">⬇ Download a ready-made sample sheet</button></a> <small class="m">Fill it in with your own contacts and upload it later.</small>` },
+
+  { t: 'How the template fills itself', render: () => `
+      <p>You write the email once. The words in <span class="ph">{curly brackets}</span> are replaced from each row of your sheet.</p>
+      <div class="stage"><div class="mail">
+        <div>Dear <span class="swap"><span class="a">{name}</span><span class="b">Asha Rao</span></span>,</div><br>
+        <div><span class="swap" style="min-width:230px"><span class="a">{intro}</span><span class="b">We understand that Acme runs a 3 MTPA plant…</span></span></div><br>
+        <div>…companies like <span class="swap" style="min-width:150px"><span class="a">{company}</span><span class="b">Acme Cements Limited</span></span> can cut bills by up to 45%.</div><br>
+        <div>…an indicative savings estimate for <span class="swap"><span class="a">{short}</span><span class="b">Acme Cements</span></span>.</div></div></div>
+      <ul style="color:var(--muted);margin:0 0 8px 18px;padding:0">
+        <li>The default template is ready. Edit it in <b>Step 2</b> on the page if you want.</li>
+        <li>Start a line with <b>*</b> to make a bullet. Write <b>[text](link)</b> to make a link.</li>
+        <li>If a row has no Intro, that line is dropped cleanly. No blank gaps.</li></ul>` },
+
+  { t: 'Upload, preview and test', render: () => `
+      <p>Drop your file in <b>Step 3</b>. The site reads it and shows every row with a status.</p>
+      <div class="stage scroll"><table class="gt"><tbody>
+        <tr class="pop" style="animation-delay:.3s"><td>✔</td><td>Asha Rao</td><td>Acme Cements</td><td><span class="badge b-ready">Ready</span></td></tr>
+        <tr class="pop" style="animation-delay:.9s"><td>✔</td><td>Bhavin Shah</td><td>Beta Steel</td><td><span class="badge b-warn">No intro</span></td></tr>
+        <tr class="pop" style="animation-delay:1.5s"><td></td><td>Gamma</td><td>gamma-at-x</td><td><span class="badge b-err">Invalid email</span></td></tr>
+        <tr class="pop" style="animation-delay:2.1s"><td></td><td>Delta Ltd</td><td>info@delta.in</td><td><span class="badge b-warn">Already emailed by a teammate</span></td></tr></tbody></table></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px 16px;font-size:13px">
+        <div><span class="badge b-ready">Ready</span> will be sent.</div><div><span class="badge b-warn">No intro</span> will be sent, without the intro paragraph.</div>
+        <div><span class="badge b-err">Issue</span> cannot be sent. Fix it in the sheet.</div><div><span class="badge b-warn">Already emailed</span> a teammate already contacted them. Unticked for you.</div></div>
+      <p style="margin-top:12px">Click any row to see exactly how its email will look. Then press <button class="pulse" style="padding:4px 10px">Send a test to myself</button> and check your own inbox first.</p>` },
+
+  { t: 'Sending safely', render: () => `
+      <div class="stage"><div style="display:flex;justify-content:space-between;font-size:13px"><span>Sending 25 emails…</span><span>one every ~20 seconds</span></div>
+        <div class="mini" style="margin:8px 0"><i></i></div>
+        <table class="gt"><tbody>
+          <tr class="pop" style="animation-delay:.3s"><td>Acme Cements</td><td><span class="badge b-ready">Sent</span></td></tr>
+          <tr class="pop" style="animation-delay:1.2s"><td>Beta Steel</td><td><span class="badge b-ready">Sent</span></td></tr>
+          <tr class="pop" style="animation-delay:2.1s"><td>Gamma Alloys</td><td><span class="badge b-warn">Sending…</span></td></tr></tbody></table></div>
+      <ul style="margin:0 0 6px 18px;padding:0;color:var(--muted)">
+        <li><b>Keep the tab open</b> while it sends. Press <b>Stop</b> to pause any time.</li>
+        <li>Emails come from <b>your Gmail</b> and appear in your Sent folder.</li>
+        <li>The <b>Team sent log</b> tab shows everything the team has sent, so nobody is emailed twice.</li>
+        <li>There is a daily limit per person, shown at the top of the page.</li>
+        <li>Use real, personalised content and small batches. It protects your mailbox from being marked as spam.</li></ul>` },
+
+  { t: 'You are ready', render: () => `
+      <p>Here is your checklist. It stays at the top of the page and ticks itself off as you go.</p>
+      <div class="stage">${[['Signed in with Google', true], ['Signature saved', !!(ME.sig.name && ME.sig.title)], ['Upload your sheet (Step 3)', false], ['Send a test to yourself (Step 4)', false], ['Send your first real emails', false]].map((c, i) => `<div class="ck pop" style="animation-delay:${i * .4}s"><span class="tick ${c[1] ? 'y' : ''}">${c[1] ? '✓' : ''}</span>${c[0]}</div>`).join('')}</div>
+      <p>You can reopen this guide any time from <b>How to use</b> at the top.</p>` }
+];
+let GI = 0;
+async function openGuide(i = 0, first = false) {
+  GI = i;
+  let ov = $('#ov'); if (!ov) { ov = document.createElement('div'); ov.id = 'ov'; ov.className = 'ov'; document.body.appendChild(ov); }
+  const step = TOUR[GI], last = GI === TOUR.length - 1;
+  ov.innerHTML = `<div class="guide" role="dialog" aria-modal="true"><div class="g-top"><div class="dots">${TOUR.map((_, k) => `<i class="${k <= GI ? 'on' : ''}"></i>`).join('')}</div><small class="m">${GI + 1}/${TOUR.length}</small></div>
+    <div class="g-body"><h2>${step.t}</h2>${step.render()}</div>
+    <div class="g-foot"><button id="gskip">${last ? 'Close' : 'Skip guide'}</button><span class="sp"></span>${GI > 0 ? '<button id="gback">Back</button>' : ''}<button class="primary" id="gnext">${last ? 'Start using it' : 'Next'}</button></div></div>`;
+  if (step.after) step.after();
+  const close = async () => { ov.remove(); if (!ME.onboarded) { ME.onboarded = true; api('/api/onboarded', { method: 'POST' }).catch(() => {}); } };
+  $('#gskip').onclick = async () => { if (step.leave) await step.leave().catch(() => {}); close(); };
+  if ($('#gback')) $('#gback').onclick = async () => { if (step.leave) await step.leave().catch(() => {}); openGuide(GI - 1); };
+  $('#gnext').onclick = async () => { if (step.leave) await step.leave().catch(() => {}); last ? close() : openGuide(GI + 1); };
+}
+
+boot();
+</script>
+</body>
+</html>
