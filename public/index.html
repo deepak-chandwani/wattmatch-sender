@@ -133,7 +133,7 @@ function renderMain() {
       <label>Body (without signature)</label><textarea id="body">${esc(ME.body)}</textarea>
       <div class="row"><button id="savetpl">Save template</button><button id="resettpl">Reset to default</button><small class="m" id="tplmsg"></small></div></div>
 
-    <div class="card"><h2>3. Upload your sheet</h2><p class="hint">Excel (.xlsx) or CSV. Columns: <b>Email</b>, <b>Name</b> (full name, used after “Dear”), <b>Company</b>. Optional: Designation, Short name, Intro, CC.</p>
+    <div class="card"><h2>3. Upload your sheet</h2><p class="hint">Excel (.xlsx) or CSV. Columns: <b>Email</b>, <b>Name</b> (full name, used after “Dear”), <b>Company</b>. Optional: Designation, Short name, Intro.</p>
       <div class="drop" id="drop">Click to choose a file or drop it here</div><input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
       <div id="mapinfo" class="hint" style="margin-top:10px"></div>
       <div id="tbl"></div></div>
@@ -277,13 +277,13 @@ const TOUR = [
   { t: 'Prepare your Excel sheet', render: () => `
       <p>One row per person. The <b>first row must be headers</b> with exactly these names (capital letters do not matter):</p>
       <div class="stage scroll"><table class="gt"><thead><tr>
-        ${[['Email', 'req', 'REQUIRED'], ['Name', 'rec', 'RECOMMENDED'], ['Company', 'req', 'REQUIRED'], ['Designation', 'opt', 'optional'], ['Short name', 'opt', 'optional'], ['Intro', 'opt', 'optional'], ['CC', 'opt', 'optional']].map((c, i) => `<th class="pop" style="animation-delay:${i * .45}s">${c[0]}<span class="${c[1]}">${c[2]}</span></th>`).join('')}</tr></thead>
-        <tbody>${[['asha.rao@acme.com', 'Asha Rao', 'Acme Cements Limited', 'CFO', 'Acme Cements', 'We understand that Acme runs a 3 MTPA plant…', ''], ['bhavin@betasteel.in', 'Bhavin Shah', 'Beta Steel Pvt Ltd', 'MD', '', '', '']].map((r, ri) => `<tr class="pop" style="animation-delay:${3.4 + ri * .5}s">${r.map(c => `<td>${esc(c) || '<small class="m">(empty is fine)</small>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+        ${[['Email', 'req', 'REQUIRED'], ['Name', 'rec', 'RECOMMENDED'], ['Company', 'req', 'REQUIRED'], ['Designation', 'opt', 'optional'], ['Short name', 'opt', 'optional'], ['Intro', 'opt', 'optional']].map((c, i) => `<th class="pop" style="animation-delay:${i * .45}s">${c[0]}<span class="${c[1]}">${c[2]}</span></th>`).join('')}</tr></thead>
+        <tbody>${[['asha.rao@acme.com', 'Asha Rao', 'Acme Cements Limited', 'CFO', 'Acme Cements', 'We understand that Acme runs a 3 MTPA plant…'], ['bhavin@betasteel.in', 'Bhavin Shah', 'Beta Steel Pvt Ltd', 'MD', '', '']].map((r, ri) => `<tr class="pop" style="animation-delay:${3.4 + ri * .5}s">${r.map(c => `<td>${esc(c) || '<small class="m">(empty is fine)</small>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
       <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px 16px;font-size:13px">
         <div><b>Email</b>: where the email goes. Must be valid.</div><div><b>Name</b>: full name, used after “Dear”. Empty becomes “Dear Sir/Madam”.</div>
         <div><b>Company</b>: used in the email text.</div><div><b>Short name</b>: used in the subject. Empty = Company without “Limited / Pvt Ltd”.</div>
-        <div><b>Intro</b>: one paragraph about that company. Empty = paragraph skipped.</div><div><b>CC</b>: anyone to copy on that email.</div></div>
-      <p style="margin-top:10px">Tip: a tab called <b>Hold</b> is ignored, handy for contacts you are not ready to email.</p>
+        <div><b>Intro</b>: one paragraph about that company. Empty = paragraph skipped.</div></div>
+      <p style="margin-top:10px">No CC column needed: <b>${esc((ME.cc || []).join(', '))}</b> is copied on every email automatically. A tab called <b>Hold</b> is ignored, handy for contacts you are not ready to email.</p>
       <a href="/api/sample.xlsx"><button class="primary">⬇ Download a ready-made sample sheet</button></a> <small class="m">Fill it in with your own contacts and upload it later.</small>` },
 
   { t: 'How the template fills itself', render: () => `
@@ -319,7 +319,7 @@ const TOUR = [
           <tr class="pop" style="animation-delay:2.1s"><td>Gamma Alloys</td><td><span class="badge b-warn">Sending…</span></td></tr></tbody></table></div>
       <ul style="margin:0 0 6px 18px;padding:0;color:var(--muted)">
         <li><b>Keep the tab open</b> while it sends. Press <b>Stop</b> to pause any time.</li>
-        <li>Emails come from <b>your Gmail</b> and appear in your Sent folder.</li>
+        <li>Emails come from <b>your Gmail</b> and appear in your Sent folder. <b>${esc((ME.cc || []).join(', '))}</b> is copied on every one.</li>
         <li>The <b>Team sent log</b> tab shows everything the team has sent, so nobody is emailed twice.</li>
         <li>There is a daily limit per person, shown at the top of the page.</li>
         <li>Use real, personalised content and small batches. It protects your mailbox from being marked as spam.</li></ul>` },
