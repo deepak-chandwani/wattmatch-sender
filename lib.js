@@ -42,11 +42,10 @@ function parseSheet(buffer) {
   let h = aoa.findIndex((r, i) => i < 5 && r.some(c => /e-?mail/i.test(clean(c))));
   if (h < 0) h = 0;
   const head = aoa[h].map(c => clean(c).toLowerCase());
-  const map = { email: -1, name: -1, designation: -1, company: -1, short: -1, intro: -1, cc: -1 };
+  const map = { email: -1, name: -1, designation: -1, company: -1, short: -1, intro: -1 };
   head.forEach((c, i) => {
     if (!c) return;
     if (map.email < 0 && /e-?mail/.test(c) && !/cc/.test(c)) map.email = i;
-    else if (map.cc < 0 && /^cc|\bcc\b/.test(c)) map.cc = i;
     else if (map.short < 0 && /short/.test(c)) map.short = i;
     else if (map.intro < 0 && /(intro|opening|personali[sz]|hook|context|paragraph)/.test(c)) map.intro = i;
     else if (map.designation < 0 && /(designation|title|role|position)/.test(c)) map.designation = i;
@@ -73,7 +72,6 @@ function parseSheet(buffer) {
       company,
       short: map.short >= 0 && clean(r[map.short]) ? clean(r[map.short]) : deriveShort(company),
       intro: map.intro >= 0 ? clean(r[map.intro]) : '',
-      cc: map.cc >= 0 ? clean(r[map.cc]) : '',
       issues: []
     };
     if (!EMAIL_RE.test(email)) row.issues.push('Invalid email');
@@ -85,7 +83,7 @@ function parseSheet(buffer) {
   const col = i => (i >= 0 ? `"${clean(aoa[h][i])}"` : 'not found');
   return {
     sheet: sheetName, rows, warnings,
-    mapping: { Email: col(map.email), Name: col(map.name), Company: col(map.company), 'Short name': map.short >= 0 ? col(map.short) : 'made from Company', Intro: col(map.intro), CC: col(map.cc) }
+    mapping: { Email: col(map.email), Name: col(map.name), Company: col(map.company), 'Short name': map.short >= 0 ? col(map.short) : 'made from Company', Intro: col(map.intro) }
   };
 }
 

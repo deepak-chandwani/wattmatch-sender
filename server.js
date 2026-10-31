@@ -25,6 +25,7 @@ const DAILY_LIMIT = +env.DAILY_LIMIT || 400;
 const SEND_DELAY = Math.max(5, +env.SEND_DELAY_SECONDS || 20);
 const ALLOWED_EMAILS = (env.ALLOWED_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
 const ALLOWED_DOMAIN = (env.ALLOWED_DOMAIN || '').toLowerCase().replace(/^@/, '').trim();
+const DEFAULT_CC = (env.DEFAULT_CC || 'enquiries@wattmatch.in').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
 const WEBSITE = env.SIGNATURE_WEBSITE || 'https://www.wattmatch.in/';
 
 for (const k of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'SESSION_SECRET', 'TOKEN_KEY']) {
@@ -132,7 +133,7 @@ app.get('/api/me', async (req, res) => {
   if (!req.session || !req.session.email) return res.json({ signedIn: false, config: { allowedHint: ALLOWED_DOMAIN || '' } });
   const u = await db.prepare('SELECT * FROM users WHERE email=?').get(req.session.email);
   if (!u) return res.json({ signedIn: false });
-  res.json({ signedIn: true, onboarded: !!u.onboarded, email: u.email, sig: sigOf(u), subject: u.subject || L.DEFAULT_SUBJECT, body: u.body || L.DEFAULT_BODY, sentToday: await sentToday(u.email), dailyLimit: DAILY_LIMIT, delay: SEND_DELAY });
+  res.json({ signedIn: true, onboarded: !!u.onboarded, email: u.email, sig: sigOf(u), subject: u.subject || L.DEFAULT_SUBJECT, body: u.body || L.DEFAULT_BODY, sentToday: await sentToday(u.email), cc: DEFAULT_CC, dailyLimit: DAILY_LIMIT, delay: SEND_DELAY });
 });
 
 app.post('/api/onboarded', needUser, async (req, res) => {
@@ -142,10 +143,10 @@ app.post('/api/onboarded', needUser, async (req, res) => {
 
 app.get('/api/sample.xlsx', needUser, (req, res) => {
   const send = [
-    ['Email', 'Name', 'Designation', 'Company', 'Short name', 'Intro', 'CC'],
-    ['asha.rao@acmecements.com', 'Asha Rao', 'Chief Financial Officer', 'Acme Cements Limited', 'Acme Cements', 'We understand that Acme Cements runs a 3 MTPA plant in Rajasthan, where grid power is a major cost.', ''],
-    ['bhavin.shah@betasteel.in', 'Bhavin Shah', 'Managing Director', 'Beta Steel Private Limited', '', '', ''],
-    ['info@gammaalloys.com', '', '', 'Gamma Alloys Limited', 'Gamma Alloys', '', 'colleague@gammaalloys.com']
+    ['Email', 'Name', 'Designation', 'Company', 'Short name', 'Intro'],
+    ['asha.rao@acmecements.com', 'Asha Rao', 'Chief Financial Officer', 'Acme Cements Limited', 'Acme Cements', 'We understand that Acme Cements runs a 3 MTPA plant in Rajasthan, where grid power is a major cost.'],
+    ['bhavin.shah@betasteel.in', 'Bhavin Shah', 'Managing Director', 'Beta Steel Private Limited', '', ''],
+    ['info@gammaalloys.com', '', '', 'Gamma Alloys Limited', 'Gamma Alloys', '']
   ];
   const guide = [
     ['Column', 'Required?', 'What to put there'],
@@ -155,11 +156,10 @@ app.get('/api/sample.xlsx', needUser, (req, res) => {
     ['Designation', 'Optional', 'Job title. Shown in the table only.'],
     ['Short name', 'Optional', 'Short company name used in the subject (e.g. Acme Cements). Empty = made from Company by dropping Limited / Pvt Ltd.'],
     ['Intro', 'Optional', 'One personalised paragraph about this company. Empty = that paragraph is skipped for the row.'],
-    ['CC', 'Optional', 'Someone to copy on that email.'],
     ['Tabs', '', 'The first tab is read. A tab named Hold, Skip or Exclude is ignored.']
   ];
   const wb = XLSX.utils.book_new();
-  const ws1 = XLSX.utils.aoa_to_sheet(send); ws1['!cols'] = [30, 20, 24, 30, 18, 60, 28].map(w => ({ wch: w }));
+  const ws1 = XLSX.utils.aoa_to_sheet(send); ws1['!cols'] = [30, 20, 24, 30, 18, 60].map(w => ({ wch: w }));
   const ws2 = XLSX.utils.aoa_to_sheet(guide); ws2['!cols'] = [16, 14, 100].map(w => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws1, 'Send');
   XLSX.utils.book_append_sheet(wb, ws2, 'How to fill');
@@ -223,7 +223,7 @@ async function sendOne(u, row, subject, body, toOverride) {
   const mail = new MailComposer({
     from: `${sig.name || u.email} <${u.email}>`,
     to: toOverride || row.email,
-    cc: toOverride ? undefined : (row.cc || undefined),
+    cc: toOverride ? undefined : (DEFAULT_CC.filter(c => c !== String(row.email).toLowerCase() && c !== u.email).join(', ') || undefined),
     subject: toOverride ? '[Test] ' + L.renderSubject(subject, row) : L.renderSubject(subject, row),
     text, html: L.textToHtml(text)
   });
@@ -286,5 +286,9 @@ app.get('/api/log.xlsx', needUser, async (req, res) => {
 });
 
 app.get('/healthz', (req, res) => res.send('ok'));
+// Serve the page from public/index.html, or from index.html next to server.js if the public folder is missing
+const PAGE = [path.join(__dirname, 'public', 'index.html'), path.join(__dirname, 'index.html')].find(p => fs.existsSync(p));
+if (!PAGE) console.error('WARNING: index.html not found. Upload public/index.html (or index.html) to the repository.');
+app.get(['/', '/index.html'], (req, res) => PAGE ? res.sendFile(PAGE) : res.status(500).send('The page file (index.html) is missing from the repository. Upload it next to server.js.'));
 app.use(express.static(path.join(__dirname, 'public')));
 dbReady.then(() => app.listen(PORT, () => console.log(`WattMatch Sender running on ${BASE_URL} (port ${PORT})`))).catch(e => { console.error('Database error:', e.message); process.exit(1); });
