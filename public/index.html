@@ -119,7 +119,7 @@ function renderMain() {
   $('#app').innerHTML = `
   <header><h1>WattMatch Sender</h1><span class="who">${esc(ME.email)} · <span id="cnt">${ME.sentToday}</span>/${ME.dailyLimit} sent in last 24h</span><button id="help">How to use</button><button id="out">Sign out</button></header>
   <main>
-   <div class="tabs"><button id="t1" class="on">Send emails</button><button id="t2">Team sent log</button></div>
+   <div class="tabs"><button id="t1" class="on">Send emails</button><button id="t2">Team sent log</button><button id="t3">LinkedIn leads<span id="newbadge"></span></button></div>
    <div id="pg1">
     <div class="chk" id="chk"></div>
     <div class="card"><h2>1. Your signature</h2><p class="hint">Added at the end of every email you send. Saved for you only.</p>
@@ -147,10 +147,15 @@ function renderMain() {
       <div class="bar"><i id="barfill"></i></div><div id="runmsg" class="hint" style="margin-top:8px"></div></div>
    </div>
    <div id="pg2" style="display:none"><div class="card"><div class="row" style="margin:0 0 10px"><label style="margin:0"><input type="checkbox" id="mine"> only mine</label><a href="/api/log.xlsx"><button>Download Excel</button></a></div><div id="logtbl" class="tablewrap"></div></div></div>
+  <div id="pg3" style="display:none"><div class="card"><h2>LinkedIn leads</h2><p class="hint">New lead-form submissions appear here automatically. Mark who is handling each one and update the status as you go.</p>
+      <div class="row" style="margin:0 0 10px"><select id="lstatus"></select><button id="lrefresh">Refresh</button><a href="/api/leads.xlsx"><button>Download Excel</button></a><button class="primary" id="luse">Use selected in Send emails</button><small class="m" id="lmsg"></small></div>
+      <div id="ltbl" class="tablewrap"></div></div></div>
   </main>`;
   $('#help').onclick = () => openGuide(0);
   $('#out').onclick = async () => { await api('/auth/logout', { method: 'POST' }); location.href = '/'; };
-  $('#t1').onclick = () => tab(1); $('#t2').onclick = () => { tab(2); loadLog(); };
+  $('#t1').onclick = () => tab(1); $('#t2').onclick = () => { tab(2); loadLog(); }; $('#t3').onclick = () => { tab(3); loadLeads(); };
+  $('#lstatus').onchange = loadLeads; $('#lrefresh').onclick = loadLeads; $('#luse').onclick = useLeads; loadLeads(true);
+  setInterval(() => { if ($('#pg3') && $('#pg3').style.display !== 'none') loadLeads(true); else loadLeads(true, true); }, 60000);
   $('#mine').onchange = loadLog;
   $('#savesig').onclick = async () => { await api('/api/profile', { method: 'PUT', body: { name: $('#sn').value, title: $('#st').value, phone: $('#sp').value } }); ME.sig = { ...ME.sig, name: $('#sn').value, title: $('#st').value, phone: $('#sp').value }; $('#sigmsg').textContent = 'Saved'; preview(); updateChecklist(); };
   $('#savetpl').onclick = async () => { try { await api('/api/template', { method: 'PUT', body: { subject: $('#subj').value, body: $('#body').value } }); $('#tplmsg').textContent = 'Saved'; preview(); } catch (e) { $('#tplmsg').textContent = e.message; } };
@@ -165,20 +170,56 @@ function renderMain() {
   $('#test').onclick = testSend; updateChecklist(); if (!ME.onboarded) openGuide(0, true);
    $('#go').onclick = runSend; $('#stop').onclick = () => { RUN.stop = true; $('#stop').disabled = true; };
 }
-function tab(n) { $('#pg1').style.display = n === 1 ? '' : 'none'; $('#pg2').style.display = n === 2 ? '' : 'none'; $('#t1').classList.toggle('on', n === 1); $('#t2').classList.toggle('on', n === 2); }
+function tab(n) { [1, 2, 3].forEach(k => { $('#pg' + k).style.display = n === k ? '' : 'none'; $('#t' + k).classList.toggle('on', n === k); }); }
 function debounce(f, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => f(...a), ms); }; }
 
 async function uploadFile(f) {
   const fd = new FormData(); fd.append('file', f);
   $('#drop').textContent = 'Reading ' + f.name + '…';
   try {
-    const r = await api('/api/upload', { method: 'POST', body: fd });
-    ROWS = r.rows; SEL = new Set(); CURRENT = 0;
-    ROWS.forEach((x, i) => { x.status = x.issues.length ? 'issue' : x.contacted && x.contacted.level === 'email' ? 'dup' : 'ready'; if (x.status === 'ready') SEL.add(i); });
-    $('#drop').textContent = `${f.name} · ${ROWS.length} rows. Click to choose another file.`;
-    $('#mapinfo').innerHTML = (r.warnings.map(w => `<div class="msg">${esc(w)}</div>`).join('')) + `Sheet “${esc(r.sheet)}”. Read: ` + Object.entries(r.mapping).map(([k, v]) => `${k} ← ${esc(v)}`).join(' · ');
-    drawTable(); $('#sendcard').style.display = ROWS.length ? '' : 'none'; preview(); updateChecklist();
+    loadRows(await api('/api/upload', { method: 'POST', body: fd }), f.name);
   } catch (e) { $('#drop').textContent = e.message; }
+}
+function loadRows(r, label) {
+  ROWS = r.rows; SEL = new Set(); CURRENT = 0;
+  ROWS.forEach((x, i) => { x.status = x.issues.length ? 'issue' : x.contacted && x.contacted.level === 'email' ? 'dup' : 'ready'; if (x.status === 'ready') SEL.add(i); });
+  $('#drop').textContent = `${label} · ${ROWS.length} rows. Click to choose another file.`;
+  $('#mapinfo').innerHTML = (r.warnings.map(w => `<div class="msg">${esc(w)}</div>`).join('')) + `Sheet “${esc(r.sheet)}”. Read: ` + Object.entries(r.mapping).map(([k, v]) => `${k} ← ${esc(v)}`).join(' · ');
+  drawTable(); $('#sendcard').style.display = ROWS.length ? '' : 'none'; preview(); updateChecklist();
+}
+
+/* ---------- LinkedIn leads ---------- */
+let LEADS = [];
+const STLABEL = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', meeting: 'Meeting booked', not_interested: 'Not interested' };
+async function loadLeads(quiet, badgeOnly) {
+  try {
+    const sel = $('#lstatus');
+    const r = await api('/api/leads' + (sel && sel.value && !badgeOnly ? '?status=' + sel.value : ''));
+    const total = r.counts.reduce((a, c) => a + c.n, 0), nNew = (r.counts.find(c => c.status === 'new') || { n: 0 }).n;
+    $('#newbadge').textContent = nNew ? ` (${nNew} new)` : '';
+    if (badgeOnly) return;
+    if (sel && !sel.options.length) sel.innerHTML = `<option value="">All statuses (${total})</option>` + r.statuses.map(s => `<option value="${s}">${STLABEL[s]} (${(r.counts.find(c => c.status === s) || { n: 0 }).n})</option>`).join('');
+    LEADS = r.rows; drawLeads();
+  } catch (e) { if (!quiet) $('#lmsg').textContent = e.message; }
+}
+function drawLeads() {
+  $('#ltbl').innerHTML = `<table><thead><tr><th></th><th>Received (UTC)</th><th>Contact</th><th>Company</th><th>Form answers</th><th>Status</th><th>Mine</th><th>Notes</th></tr></thead><tbody>${LEADS.map(l => `<tr data-id="${l.id}"><td><input type="checkbox" class="lsel"></td><td>${esc(l.created_at)}</td>
+    <td>${esc(l.name) || '<small class="m">no name</small>'}<br><small class="m">${esc(l.title)}</small><br>${esc(l.email)}${l.phone ? '<br><small class="m">' + esc(l.phone) + '</small>' : ''}${l.emailed ? '<br><span class="badge b-warn">Already emailed</span>' : ''}</td>
+    <td>${esc(l.company)}</td><td><small>Bill: ${esc(l.monthly_bill) || '-'}<br>RE share: ${esc(l.re_share) || '-'}<br>Timeline: ${esc(l.timeline) || '-'}</small></td>
+    <td><select class="lst">${Object.entries(STLABEL).map(([k, v]) => `<option value="${k}" ${l.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
+    <td><input type="checkbox" class="lown" ${l.owner ? 'checked' : ''} title="${esc(l.owner || 'Nobody yet')}"><br><small class="m">${esc((l.owner || '').split('@')[0])}</small></td>
+    <td><input type="text" class="lnote" value="${esc(l.notes)}" placeholder="Add a note"></td></tr>`).join('') || '<tr><td colspan="8">No leads yet.</td></tr>'}</tbody></table>`;
+  const save = async (tr, body) => { try { await api('/api/leads/' + tr.dataset.id, { method: 'PUT', body }); $('#lmsg').textContent = 'Saved'; loadLeads(true, true); } catch (e) { $('#lmsg').textContent = e.message; } };
+  $('#ltbl tbody').onchange = e => { const tr = e.target.closest('tr'); if (!tr) return;
+    if (e.target.classList.contains('lst')) save(tr, { status: e.target.value });
+    else if (e.target.classList.contains('lown')) save(tr, { owner: e.target.checked });
+    else if (e.target.classList.contains('lnote')) save(tr, { notes: e.target.value }); };
+}
+async function useLeads() {
+  const ids = [...document.querySelectorAll('#ltbl .lsel:checked')].map(c => +c.closest('tr').dataset.id);
+  if (!ids.length) { $('#lmsg').textContent = 'Tick the leads you want to email first.'; return; }
+  try { loadRows(await api('/api/leads/to-rows', { method: 'POST', body: { ids } }), 'LinkedIn leads'); tab(1); $('#sendcard').scrollIntoView({ behavior: 'smooth' }); }
+  catch (e) { $('#lmsg').textContent = e.message; }
 }
 function badge(x) {
   if (x.status === 'sent') return '<span class="badge b-ready">Sent</span>';
