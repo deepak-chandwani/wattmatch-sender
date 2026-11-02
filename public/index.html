@@ -18,6 +18,7 @@ main{max-width:1050px;margin:0 auto;padding:16px}
 .card p.hint{margin:0 0 12px;color:var(--muted);font-size:13px}
 label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
 input[type=text],textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--field);color:var(--ink);font:inherit}
+select{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--field);color:var(--ink);font:inherit}
 textarea{min-height:300px;resize:vertical;line-height:1.45;font-size:14px}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 @media(max-width:700px){.grid{grid-template-columns:1fr}}
@@ -34,7 +35,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .drop.over{border-color:var(--brand);color:var(--brand)}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--muted);font-weight:600;position:sticky;top:50px;background:var(--card)}
+th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--card)}
 .tablewrap{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:8px}
 tr.sel{background:color-mix(in srgb,var(--brand) 10%,transparent)}
 .badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;border:1px solid var(--line)}
@@ -198,7 +199,7 @@ async function loadLeads(quiet, badgeOnly) {
     const total = r.counts.reduce((a, c) => a + c.n, 0), nNew = (r.counts.find(c => c.status === 'new') || { n: 0 }).n;
     $('#newbadge').textContent = nNew ? ` (${nNew} new)` : '';
     if (badgeOnly) return;
-    if (sel && !sel.options.length) sel.innerHTML = `<option value="">All statuses (${total})</option>` + r.statuses.map(s => `<option value="${s}">${STLABEL[s]} (${(r.counts.find(c => c.status === s) || { n: 0 }).n})</option>`).join('');
+    if (sel) { const html = `<option value="">All statuses (${total})</option>` + r.statuses.map(s => `<option value="${s}">${STLABEL[s]} (${(r.counts.find(c => c.status === s) || { n: 0 }).n})</option>`).join(''); if (sel.dataset.sig !== html) { const cur = sel.value; sel.innerHTML = html; sel.value = cur; sel.dataset.sig = html; } }
     LEADS = r.rows; drawLeads();
   } catch (e) { if (!quiet) $('#lmsg').textContent = e.message; }
 }
