@@ -27,6 +27,9 @@ const ALLOWED_EMAILS = (env.ALLOWED_EMAILS || '').toLowerCase().split(',').map(s
 const ALLOWED_DOMAIN = (env.ALLOWED_DOMAIN || '').toLowerCase().replace(/^@/, '').trim();
 const DEFAULT_CC = (env.DEFAULT_CC || 'enquiries@wattmatch.in').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
 const WEBSITE = env.SIGNATURE_WEBSITE || 'https://www.wattmatch.in/';
+const LEADS_SECRET = env.LEADS_WEBHOOK_SECRET || '';   // shared secret for the lead webhook and the morning digest
+const DIGEST_SENDER = (env.DIGEST_SENDER || '').toLowerCase().trim(); // a signed-in user whose Gmail sends the digest
+const DIGEST_TO = (env.DIGEST_TO || '').split(',').map(x => x.trim()).filter(Boolean);
 
 for (const k of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'SESSION_SECRET', 'TOKEN_KEY']) {
   if (!env[k]) { console.error(`Missing ${k}. Copy .env.example to .env and fill it in (see README).`); process.exit(1); }
@@ -59,6 +62,13 @@ CREATE TABLE IF NOT EXISTS sent (
   sent_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS sent_to ON sent(to_email);
 CREATE INDEX IF NOT EXISTS sent_company ON sent(company);
+CREATE TABLE IF NOT EXISTS leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, external_id TEXT, name TEXT, email TEXT, company TEXT, title TEXT, phone TEXT,
+  monthly_bill TEXT, re_share TEXT, timeline TEXT, campaign TEXT, raw TEXT,
+  status TEXT DEFAULT 'new', owner TEXT DEFAULT '', notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS leads_email ON leads(email);
+CREATE INDEX IF NOT EXISTS leads_ext ON leads(external_id);
 `);
   try { await client.execute('ALTER TABLE users ADD COLUMN onboarded INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
 })();
@@ -77,6 +87,7 @@ const app = express();
 });
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieSession({ name: 'ws', secret: env.SESSION_SECRET, maxAge: 7 * 24 * 3600 * 1000, sameSite: 'lax', httpOnly: true, secure: BASE_URL.startsWith('https') }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
@@ -283,6 +294,98 @@ app.get('/api/log.xlsx', needUser, async (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="team-sent-log.xlsx"');
   res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+});
+
+
+/* ---------- LinkedIn leads ---------- */
+const secretOk = req => {
+  const given = String(req.get('x-webhook-secret') || req.query.key || '');
+  const a = Buffer.from(given), b = Buffer.from(LEADS_SECRET);
+  return !!LEADS_SECRET && a.length === b.length && crypto.timingSafeEqual(a, b);
+};
+
+// Called by Zapier / Make (or anything else) each time a LinkedIn lead-gen form is submitted
+app.post('/api/webhooks/leads', async (req, res) => {
+  if (!LEADS_SECRET) return res.status(503).json({ error: 'LEADS_WEBHOOK_SECRET is not set on the server' });
+  if (!secretOk(req)) return res.status(401).json({ error: 'Bad secret' });
+  const items = Array.isArray(req.body) ? req.body : [req.body];
+  const out = { added: 0, duplicates: 0, rejected: 0 };
+  for (const item of items.slice(0, 200)) {
+    const l = L.normalizeLead(item);
+    if (!l.email && !l.name) { out.rejected++; continue; }
+    let dup = null;
+    if (l.external_id) dup = await db.prepare('SELECT id FROM leads WHERE external_id=?').get(l.external_id);
+    if (!dup && l.email) dup = await db.prepare(`SELECT id FROM leads WHERE email=? AND created_at > datetime('now','-30 day')`).get(l.email);
+    if (dup) { out.duplicates++; continue; }
+    await db.prepare('INSERT INTO leads(external_id,name,email,company,title,phone,monthly_bill,re_share,timeline,campaign,raw) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(l.external_id, l.name, l.email, l.company, l.title, l.phone, l.monthly_bill, l.re_share, l.timeline, l.campaign, JSON.stringify(item).slice(0, 8000));
+    out.added++;
+  }
+  res.json({ ok: true, ...out });
+});
+
+app.get('/api/leads', needUser, async (req, res) => {
+  const st = String(req.query.status || '');
+  const rows = L.LEAD_STATUSES.includes(st)
+    ? await db.prepare('SELECT * FROM leads WHERE status=? ORDER BY id DESC LIMIT 2000').all(st)
+    : await db.prepare('SELECT * FROM leads ORDER BY id DESC LIMIT 2000').all();
+  const counts = await db.prepare('SELECT status, COUNT(*) n FROM leads GROUP BY status').all();
+  for (const r of rows) r.emailed = r.email ? !!(await db.prepare(`SELECT 1 x FROM sent WHERE to_email=? AND status='sent' LIMIT 1`).get(r.email)) : false;
+  res.json({ rows, counts, statuses: L.LEAD_STATUSES });
+});
+
+app.put('/api/leads/:id', needUser, async (req, res) => {
+  const { status, notes, owner } = req.body || {};
+  const cur = await db.prepare('SELECT * FROM leads WHERE id=?').get(+req.params.id);
+  if (!cur) return res.status(404).json({ error: 'Lead not found' });
+  const st = status === undefined ? cur.status : status;
+  if (!L.LEAD_STATUSES.includes(st)) return res.status(400).json({ error: 'Bad status' });
+  const own = owner === undefined ? cur.owner : (owner ? req.user.email : '');
+  const nt = notes === undefined ? cur.notes : String(notes).slice(0, 4000);
+  await db.prepare('UPDATE leads SET status=?, owner=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(st, own, nt, cur.id);
+  res.json({ ok: true });
+});
+
+// Turn selected leads into rows for the "Send emails" tab (same shape as an uploaded sheet)
+app.post('/api/leads/to-rows', needUser, async (req, res) => {
+  const ids = (req.body && Array.isArray(req.body.ids) ? req.body.ids : []).map(Number).filter(Boolean).slice(0, 500);
+  const rows = [];
+  for (const id of ids) {
+    const l = await db.prepare('SELECT * FROM leads WHERE id=?').get(id);
+    if (!l) continue;
+    const r = L.leadToRow(l, rows.length);
+    if (r.email && rows.some(x => x.email === r.email)) r.issues.push('Duplicate in this sheet');
+    r.contacted = await contactedInfo(r);
+    rows.push(r);
+  }
+  res.json({ rows, warnings: [], sheet: 'LinkedIn leads', mapping: { Source: 'LinkedIn leads tab' } });
+});
+
+app.get('/api/leads.xlsx', needUser, async (req, res) => {
+  const rows = await db.prepare('SELECT created_at "Received (UTC)", name Name, email Email, company Company, title Designation, phone Phone, monthly_bill "Monthly bill", re_share "Current RE share", timeline Timeline, campaign Campaign, status Status, owner Owner, notes Notes FROM leads ORDER BY id DESC').all();
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'LinkedIn leads');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="linkedin-leads.xlsx"');
+  res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+});
+
+// Morning digest. Point a free scheduler (cron-job.org / GitHub Actions) at this once a day; it also wakes the free Render service.
+app.get('/api/cron/leads-digest', async (req, res) => {
+  if (!LEADS_SECRET) return res.status(503).json({ error: 'LEADS_WEBHOOK_SECRET is not set on the server' });
+  if (!secretOk(req)) return res.status(401).json({ error: 'Bad secret' });
+  if (!DIGEST_SENDER || !DIGEST_TO.length) return res.json({ ok: true, sent: false, reason: 'DIGEST_SENDER / DIGEST_TO not set' });
+  const leads = await db.prepare(`SELECT * FROM leads WHERE created_at > datetime('now','-1 day') ORDER BY id`).all();
+  if (!leads.length) return res.json({ ok: true, sent: false, reason: 'No new leads in the last 24 hours' });
+  const u = await db.prepare('SELECT * FROM users WHERE email=?').get(DIGEST_SENDER);
+  if (!u) return res.status(400).json({ error: `${DIGEST_SENDER} has not signed in to the site yet` });
+  const open = (await db.prepare(`SELECT COUNT(*) n FROM leads WHERE status='new'`).get()).n;
+  const lines = leads.map(l => `* ${l.name || l.email} | ${l.company || '-'} | ${l.email || '-'}${l.phone ? ' | ' + l.phone : ''} | bill: ${l.monthly_bill || '-'} | RE share: ${l.re_share || '-'} | timeline: ${l.timeline || '-'}`).join('\n');
+  const text = `${leads.length} new LinkedIn lead${leads.length === 1 ? '' : 's'} in the last 24 hours (${open} still marked New in total).\n\n${lines}\n\nOpen the site and use the LinkedIn leads tab: ${BASE_URL}`;
+  const mail = new MailComposer({ from: `WattMatch Sender <${u.email}>`, to: DIGEST_TO.join(', '), subject: `${leads.length} new LinkedIn lead${leads.length === 1 ? '' : 's'} (${new Date().toISOString().slice(0, 10)})`, text, html: L.textToHtml(text) });
+  const raw = await new Promise((ok, no) => mail.compile().build((e, b) => e ? no(e) : ok(b)));
+  await (await gmailFor(u)).users.messages.send({ userId: 'me', requestBody: { raw: raw.toString('base64url') } });
+  res.json({ ok: true, sent: true, leads: leads.length });
 });
 
 app.get('/healthz', (req, res) => res.send('ok'));

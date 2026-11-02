@@ -55,6 +55,17 @@ Each person: Sign in with Google > set signature > check template > upload sheet
 - Emails go one at a time with a ~20 second gap (set `SEND_DELAY_SECONDS`). The browser tab must stay open while sending; use Stop to pause.
 - Daily cap per person defaults to 400 (Gmail allows about 500/day for normal accounts, 2000 for Workspace). Change with `DAILY_LIMIT`.
 
+## LinkedIn leads (new)
+
+A **LinkedIn leads** tab collects every lead-form submission from your LinkedIn ads, so the team sees new leads without downloading CSVs.
+
+1. In Render, add the environment variable `LEADS_WEBHOOK_SECRET` (a long random string). Redeploy.
+2. In **Zapier** (or Make): trigger "LinkedIn Lead Gen Forms: New Lead Gen Form Response", action "Webhooks by Zapier: POST" (payload type JSON) to `https://YOUR-SITE-URL/api/webhooks/leads`, with header `x-webhook-secret: <your secret>` (or add `?key=<your secret>` to the URL). Map the form fields (first name, last name, email, company, job title, phone, monthly bill, current RE share, timeline, lead id). Field names are matched loosely, so exact spelling does not matter.
+3. New leads appear in the tab within seconds (the page checks every minute). Duplicates (same lead id, or same email within 30 days) are ignored.
+4. In the tab: set a status, tick **Mine** to claim a lead, add notes, download Excel, or tick leads and press **Use selected in Send emails** to load them into the normal send flow (the team sent log still warns about anyone already emailed).
+
+**Morning digest (optional):** set `DIGEST_SENDER` (a user who has signed in) and `DIGEST_TO` (comma-separated). Then create a free daily job on cron-job.org (or GitHub Actions) that calls `https://YOUR-SITE-URL/api/cron/leads-digest?key=<your secret>` at 8:00 AM IST (02:30 UTC). It emails the leads from the last 24 hours, and no email is sent on days with none. It also wakes the free Render service.
+
 ## Notes
 - Data is stored in Turso (free hosting) or a local SQLite file. Refresh tokens are stored encrypted (AES-256-GCM) with `TOKEN_KEY`. Keep that key safe and never commit `.env`.
 - Run `npm test` to check the sheet reader and email rendering.

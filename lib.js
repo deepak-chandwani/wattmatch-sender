@@ -146,4 +146,32 @@ function textToHtml(text) {
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#202124">${out.join('')}</div>`;
 }
 
-module.exports = { DEFAULT_SUBJECT, DEFAULT_BODY, parseSheet, renderText, renderSubject, textToHtml, clean, EMAIL_RE, deriveShort, values };
+/* ---------- LinkedIn lead-gen form leads (arrive via webhook) ---------- */
+const pick = (o, keys) => { for (const k of keys) { for (const kk of Object.keys(o)) { if (kk.toLowerCase().replace(/[^a-z0-9]/g, '') === k && clean(o[kk])) return clean(o[kk]); } } return ''; };
+function normalizeLead(body) {
+  const o = body && typeof body === 'object' ? body : {};
+  const first = pick(o, ['firstname', 'first']), last = pick(o, ['lastname', 'last']);
+  const email = pick(o, ['email', 'workemail', 'emailaddress']).toLowerCase();
+  return {
+    external_id: pick(o, ['leadid', 'id', 'externalid', 'responseid']),
+    name: pick(o, ['fullname', 'name']) || clean(first + ' ' + last),
+    email,
+    company: pick(o, ['company', 'companyname', 'organization', 'organisation']),
+    title: pick(o, ['jobtitle', 'title', 'designation']),
+    phone: pick(o, ['phone', 'phonenumber', 'mobile']),
+    monthly_bill: pick(o, ['monthlybill', 'monthlyelectricitybill', 'electricitybill']),
+    re_share: pick(o, ['reshare', 'currentreshare', 'renewableshare', 'currentrenewableshare']),
+    timeline: pick(o, ['timeline', 'switchtimeline', 'timetoswitch']),
+    campaign: pick(o, ['campaign', 'campaignname', 'formname', 'form'])
+  };
+}
+const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'meeting', 'not_interested'];
+function leadToRow(l, i) {
+  const company = clean(l.company);
+  const row = { row: i + 2, email: clean(l.email).toLowerCase(), name: clean(l.name), designation: clean(l.title), company, short: deriveShort(company), intro: '', issues: [] };
+  if (!EMAIL_RE.test(row.email)) row.issues.push('Invalid email');
+  if (!company) row.issues.push('No company');
+  return row;
+}
+
+module.exports = { normalizeLead, leadToRow, LEAD_STATUSES, DEFAULT_SUBJECT, DEFAULT_BODY, parseSheet, renderText, renderSubject, textToHtml, clean, EMAIL_RE, deriveShort, values };
