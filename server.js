@@ -28,6 +28,7 @@ const ALLOWED_DOMAIN = (env.ALLOWED_DOMAIN || '').toLowerCase().replace(/^@/, ''
 const DEFAULT_CC = (env.DEFAULT_CC || 'enquiries@wattmatch.in').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
 const WEBSITE = env.SIGNATURE_WEBSITE || 'https://www.wattmatch.in/';
 const LEADS_SECRET = env.LEADS_WEBHOOK_SECRET || '';   // shared secret for the lead webhook and the morning digest
+const LEADS_VIEW_CODE = env.LEADS_VIEW_CODE || ''; // optional: if set, people who are not signed in must type this code to view leads
 const DIGEST_SENDER = (env.DIGEST_SENDER || '').toLowerCase().trim(); // a signed-in user whose Gmail sends the digest
 const DIGEST_TO = (env.DIGEST_TO || '').split(',').map(x => x.trim()).filter(Boolean);
 
@@ -324,12 +325,27 @@ app.post('/api/webhooks/leads', async (req, res) => {
   res.json({ ok: true, ...out });
 });
 
-app.get('/api/leads', needUser, async (req, res) => {
+// Viewing leads needs no Google sign-in. If LEADS_VIEW_CODE is set, a signed-out visitor must enter it first.
+const canViewLeads = req => !!(req.session && req.session.email) || !LEADS_VIEW_CODE || !!(req.session && req.session.leadsUnlocked);
+const unlockTries = new Map();
+app.post('/api/leads/unlock', (req, res) => {
+  if (!LEADS_VIEW_CODE) return res.json({ ok: true });
+  const t = unlockTries.get(req.ip) || { n: 0, at: Date.now() };
+  if (Date.now() - t.at > 15 * 60 * 1000) { t.n = 0; t.at = Date.now(); }
+  if (t.n >= 10) return res.status(429).json({ error: 'Too many tries. Wait 15 minutes.' });
+  const a = Buffer.from(String((req.body || {}).code || '').trim()), b = Buffer.from(LEADS_VIEW_CODE);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) { t.n++; unlockTries.set(req.ip, t); return res.status(401).json({ error: 'Wrong code' }); }
+  req.session = Object.assign({}, req.session || {}, { leadsUnlocked: true });
+  res.json({ ok: true });
+});
+app.get('/api/leads', async (req, res) => {
+  if (!canViewLeads(req)) return res.status(401).json({ error: 'Enter the access code to view leads', needCode: true });
   const st = String(req.query.status || '');
   const rows = L.LEAD_STATUSES.includes(st)
     ? await db.prepare('SELECT * FROM leads WHERE status=? ORDER BY id DESC LIMIT 2000').all(st)
     : await db.prepare('SELECT * FROM leads ORDER BY id DESC LIMIT 2000').all();
   const counts = await db.prepare('SELECT status, COUNT(*) n FROM leads GROUP BY status').all();
+  for (const r of rows) delete r.raw;
   for (const r of rows) r.emailed = r.email ? !!(await db.prepare(`SELECT 1 x FROM sent WHERE to_email=? AND status='sent' LIMIT 1`).get(r.email)) : false;
   res.json({ rows, counts, statuses: L.LEAD_STATUSES });
 });
@@ -361,7 +377,8 @@ app.post('/api/leads/to-rows', needUser, async (req, res) => {
   res.json({ rows, warnings: [], sheet: 'LinkedIn leads', mapping: { Source: 'LinkedIn leads tab' } });
 });
 
-app.get('/api/leads.xlsx', needUser, async (req, res) => {
+app.get('/api/leads.xlsx', async (req, res) => {
+  if (!canViewLeads(req)) return res.status(401).send('Enter the access code on the leads page first.');
   const rows = await db.prepare('SELECT created_at "Received (UTC)", name Name, email Email, company Company, title Designation, phone Phone, monthly_bill "Monthly bill", re_share "Current RE share", timeline Timeline, campaign Campaign, status Status, owner Owner, notes Notes FROM leads ORDER BY id DESC').all();
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'LinkedIn leads');

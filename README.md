@@ -55,6 +55,14 @@ Each person: Sign in with Google > set signature > check template > upload sheet
 - Emails go one at a time with a ~20 second gap (set `SEND_DELAY_SECONDS`). The browser tab must stay open while sending; use Stop to pause.
 - Daily cap per person defaults to 400 (Gmail allows about 500/day for normal accounts, 2000 for Workspace). Change with `DAILY_LIMIT`.
 
+## Home screen and who can see the leads
+
+The site opens on a choice screen: **View LinkedIn leads** or **Send emails**.
+
+- **View LinkedIn leads** works without Google sign-in and is read-only (people who are signed in can also change statuses, add notes and use leads in the send flow).
+- **Send emails** needs Google sign-in, as before.
+- The leads contain prospects' names, emails and phone numbers. If you do not want anyone with the site address to see them, set `LEADS_VIEW_CODE` in Render. Signed-out visitors then have to type that code once. Changing statuses, notes and sending always need Google sign-in.
+
 ## LinkedIn leads (new)
 
 A **LinkedIn leads** tab collects every lead-form submission from your LinkedIn ads, so the team sees new leads without downloading CSVs.
