@@ -46,6 +46,19 @@ Render's Free plan has no permanent disk, so the data (saved templates, team sen
 
 Other free hosts: Fly.io, Railway and Koyeb have limited or no permanent free plans for new accounts at the time of writing. Oracle Cloud's "Always Free" virtual machine is a free alternative if someone is comfortable with a server (set `DB_PATH` there, no Turso needed).
 
+## Step 3 (recommended): Vercel instead of Render (no sleeping)
+Vercel's free Hobby plan does not sleep, so the site opens in a second or two. Use the **same Turso database** as before: all saved templates, sign-ins, the team sent log and the LinkedIn leads carry over.
+
+1. On https://vercel.com sign in with GitHub > **Add New > Project** > import this repo. Framework preset **Other**, leave the build and output settings empty (the repo's `vercel.json` handles it).
+2. **Environment Variables**: copy every value you have on Render (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET, TOKEN_KEY, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, ALLOWED_EMAILS / ALLOWED_DOMAIN, LEADS_WEBHOOK_SECRET, LEADS_VIEW_CODE, DIGEST_SENDER, DIGEST_TO, DAILY_LIMIT, SEND_DELAY_SECONDS). **TOKEN_KEY must be exactly the same**, or saved Google logins cannot be read and everyone has to sign in again. Also add `CRON_SECRET` with the same value as `LEADS_WEBHOOK_SECRET` (used by the built-in morning digest).
+3. Deploy. Then set `BASE_URL` to the address Vercel gives you (e.g. `https://wattmatch-sender.vercel.app`, no trailing slash) and **Redeploy**.
+4. Google Cloud > Credentials > your OAuth client: add `https://YOUR-VERCEL-ADDRESS/auth/callback` as an authorised redirect URI.
+5. Zapier / Make: change the LinkedIn webhook URL to `https://YOUR-VERCEL-ADDRESS/api/webhooks/leads` (same secret header).
+6. Morning digest: `vercel.json` already runs it daily around 8:00 AM IST (Vercel's free plan may run it any time within that hour). You can delete the cron-job.org job.
+7. When the Vercel site works, delete or suspend the Render service so leads only go to one place.
+
+Notes for Vercel: uploaded sheets must be under about 4 MB. Sending works the same (the browser sends one email at a time, so keep the tab open).
+
 ## Using it
 On first sign-in each person gets an animated 7-step guide: signature setup, exactly which sheet headers to use (with a downloadable sample sheet), how the template fills itself, the preview and test, and safe sending. A setup checklist stays at the top of the page, and the guide can be replayed from **How to use**.
 

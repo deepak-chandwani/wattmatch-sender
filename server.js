@@ -20,7 +20,9 @@ const L = require('./lib');
 
 const env = process.env;
 const PORT = +env.PORT || 3000;
-const BASE_URL = (env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+const ON_VERCEL = !!env.VERCEL;
+// On Vercel, BASE_URL falls back to the project's production address if not set
+const BASE_URL = (env.BASE_URL || (env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://' + env.VERCEL_PROJECT_PRODUCTION_URL : `http://localhost:${PORT}`)).replace(/\/$/, '');
 const DAILY_LIMIT = +env.DAILY_LIMIT || 400;
 const SEND_DELAY = Math.max(5, +env.SEND_DELAY_SECONDS || 20);
 const ALLOWED_EMAILS = (env.ALLOWED_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
@@ -32,11 +34,13 @@ const LEADS_VIEW_CODE = env.LEADS_VIEW_CODE || ''; // optional: if set, people w
 const DIGEST_SENDER = (env.DIGEST_SENDER || '').toLowerCase().trim(); // a signed-in user whose Gmail sends the digest
 const DIGEST_TO = (env.DIGEST_TO || '').split(',').map(x => x.trim()).filter(Boolean);
 
+// On Vercel a crash would only show "Function invocation failed", so throw a clear message instead of exiting
+const fatal = msg => { console.error(msg); if (ON_VERCEL) throw new Error(msg); process.exit(1); };
 for (const k of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'SESSION_SECRET', 'TOKEN_KEY']) {
-  if (!env[k]) { console.error(`Missing ${k}. Copy .env.example to .env and fill it in (see README).`); process.exit(1); }
+  if (!env[k]) fatal(`Missing ${k}. Add it in the hosting settings (Render/Vercel Environment Variables) or in .env (see README).`);
 }
 const KEY = Buffer.from(env.TOKEN_KEY, 'hex');
-if (KEY.length !== 32) { console.error('TOKEN_KEY must be 64 hex characters (32 bytes).'); process.exit(1); }
+if (KEY.length !== 32) fatal('TOKEN_KEY must be 64 hex characters (32 bytes).');
 
 /* ---------- database ---------- */
 /* Database: a free Turso cloud database (set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN) or, if those are
@@ -44,6 +48,7 @@ if (KEY.length !== 32) { console.error('TOKEN_KEY must be 64 hex characters (32 
 const DB_PATH = env.DB_PATH || path.join(__dirname, 'data', 'sender.db');
 let client;
 if (env.TURSO_DATABASE_URL) client = createClient({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN });
+else if (ON_VERCEL) fatal('On Vercel the data must live in Turso: set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (see README).');
 else { fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); client = createClient({ url: 'file:' + DB_PATH }); }
 const rowsOf = r => r.rows.map(row => Object.fromEntries(r.columns.map(c => [c, row[c]])));
 const db = { prepare: sql => ({
@@ -87,6 +92,8 @@ const app = express();
     : f));
 });
 app.set('trust proxy', 1);
+// Serverless: the first request on a fresh instance waits until the tables are ready
+app.use((req, res, next) => dbReady.then(() => next(), next));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieSession({ name: 'ws', secret: env.SESSION_SECRET, maxAge: 7 * 24 * 3600 * 1000, sameSite: 'lax', httpOnly: true, secure: BASE_URL.startsWith('https') }));
@@ -300,7 +307,9 @@ app.get('/api/log.xlsx', needUser, async (req, res) => {
 
 /* ---------- LinkedIn leads ---------- */
 const secretOk = req => {
-  const given = String(req.get('x-webhook-secret') || req.query.key || '');
+  // Vercel Cron sends "Authorization: Bearer <CRON_SECRET>"; set CRON_SECRET to the same value as LEADS_WEBHOOK_SECRET
+  const bearer = String(req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  const given = String(req.get('x-webhook-secret') || req.query.key || bearer || '');
   const a = Buffer.from(given), b = Buffer.from(LEADS_SECRET);
   return !!LEADS_SECRET && a.length === b.length && crypto.timingSafeEqual(a, b);
 };
@@ -411,4 +420,7 @@ const PAGE = [path.join(__dirname, 'public', 'index.html'), path.join(__dirname,
 if (!PAGE) console.error('WARNING: index.html not found. Upload public/index.html (or index.html) to the repository.');
 app.get(['/', '/index.html'], (req, res) => PAGE ? res.sendFile(PAGE) : res.status(500).send('The page file (index.html) is missing from the repository. Upload it next to server.js.'));
 app.use(express.static(path.join(__dirname, 'public')));
-dbReady.then(() => app.listen(PORT, () => console.log(`WattMatch Sender running on ${BASE_URL} (port ${PORT})`))).catch(e => { console.error('Database error:', e.message); process.exit(1); });
+module.exports = app; // used by api/index.js on Vercel
+if (require.main === module) {
+  dbReady.then(() => app.listen(PORT, () => console.log(`WattMatch Sender running on ${BASE_URL} (port ${PORT})`))).catch(e => { console.error('Database error:', e.message); process.exit(1); });
+}
