@@ -18,7 +18,6 @@ main{max-width:1050px;margin:0 auto;padding:16px}
 .card p.hint{margin:0 0 12px;color:var(--muted);font-size:13px}
 label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
 input[type=text],textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--field);color:var(--ink);font:inherit}
-select{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--field);color:var(--ink);font:inherit}
 textarea{min-height:300px;resize:vertical;line-height:1.45;font-size:14px}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 @media(max-width:700px){.grid{grid-template-columns:1fr}}
@@ -35,7 +34,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .drop.over{border-color:var(--brand);color:var(--brand)}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--card)}
+th{color:var(--muted);font-weight:600;position:sticky;top:50px;background:var(--card)}
 .tablewrap{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:8px}
 tr.sel{background:color-mix(in srgb,var(--brand) 10%,transparent)}
 .badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;border:1px solid var(--line)}
@@ -46,13 +45,6 @@ tr.sel{background:color-mix(in srgb,var(--brand) 10%,transparent)}
 .login{max-width:420px;margin:12vh auto;text-align:center}
 .login h1{margin:0 0 6px}.login p{color:var(--muted)}
 .bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;width:0;background:var(--brand);transition:width .3s}
-.choose{max-width:760px;margin:9vh auto;padding:0 16px;text-align:center}
-.choose h1{margin:0 0 4px}.choose p{color:var(--muted);margin:0}
-.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px}
-@media(max-width:700px){.cgrid{grid-template-columns:1fr}}
-.cbox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px 18px;text-align:center;font:inherit;color:var(--ink);cursor:pointer}
-.cbox:hover{border-color:var(--brand)}
-.cbox .ic{display:block;font-size:34px}.cbox h2{margin:8px 0 4px;font-size:18px}.cbox span.d{color:var(--muted);font-size:13px}
 small.m{color:var(--muted)}
 .ph{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--field);border:1px solid var(--line);border-radius:5px;padding:1px 5px;cursor:pointer}
 
@@ -111,35 +103,9 @@ const api = async (url, opts = {}) => {
 };
 let ME = null, ROWS = [], SEL = new Set(), CURRENT = 0, RUN = { on: false, stop: false };
 
-let LTIMER;
-function startLeadTimer() { clearInterval(LTIMER); LTIMER = setInterval(() => { const pg = $('#pg3'); loadLeads(true, !!pg && pg.style.display === 'none'); }, 60000); }
 async function boot() {
   ME = await api('/api/me');
-  if (new URLSearchParams(location.search).get('msg')) return renderLogin();
-  const after = sessionStorage.getItem('after');
-  if (ME.signedIn && after) { sessionStorage.removeItem('after'); renderMain(); if (after === 'leads') { tab(3); loadLeads(); } return; }
-  renderChooser();
-}
-function renderChooser() {
-  clearInterval(LTIMER);
-  $('#app').innerHTML = `<div class="choose"><h1>WattMatch</h1><p>What would you like to do?</p>
-    <div class="cgrid">
-      <button class="cbox" id="cLeads"><span class="ic">📥</span><h2>View LinkedIn leads</h2><span class="d">See the latest leads from the LinkedIn ads.${ME.signedIn ? '' : ' No sign-in needed.'}</span></button>
-      <button class="cbox" id="cSend"><span class="ic">✉️</span><h2>Send emails</h2><span class="d">${ME.signedIn ? 'Continue as ' + esc(ME.email) : 'Sign in with Google to send outreach emails.'}</span></button>
-    </div></div>`;
-  $('#cLeads').onclick = () => { if (ME.signedIn) { renderMain(); tab(3); loadLeads(); } else renderLeadsPage(); };
-  $('#cSend').onclick = () => { if (ME.signedIn) renderMain(); else { sessionStorage.setItem('after', 'send'); renderLogin(); } };
-}
-function renderLeadsPage() {
-  LEADS_RO = true;
-  $('#app').innerHTML = `<header><h1>WattMatch · LinkedIn leads</h1><span class="who">View only</span><button id="home">Home</button><button class="primary" id="signin">Sign in to email or update leads</button></header>
-  <main><div class="card"><h2>LinkedIn leads</h2><p class="hint">New lead-form submissions from the LinkedIn ads. This page is read-only. Sign in with Google to change a status, add notes or email these leads.</p>
-    <div class="row" style="margin:0 0 10px"><select id="lstatus"></select><button id="lrefresh">Refresh</button><a href="/api/leads.xlsx"><button>Download Excel</button></a><small class="m" id="lmsg"></small></div>
-    <div id="ltbl" class="tablewrap"></div></div></main>`;
-  $('#home').onclick = renderChooser;
-  $('#signin').onclick = () => { sessionStorage.setItem('after', 'leads'); renderLogin(); };
-  $('#lstatus').onchange = () => loadLeads(); $('#lrefresh').onclick = () => loadLeads();
-  loadLeads(); startLeadTimer();
+  ME.signedIn ? renderMain() : renderLogin();
 }
 function renderLogin() {
   const msg = new URLSearchParams(location.search).get('msg');
@@ -147,16 +113,13 @@ function renderLogin() {
     <p>Send personalised outreach emails from your own Gmail. Upload your Excel sheet, check the preview, and send.</p>
     ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}
     <a href="/auth/google"><button class="primary" style="padding:10px 20px;font-size:15px">Sign in with Google</button></a>
-    <p style="font-size:12px;margin-top:16px">Google will ask permission to <b>send email on your behalf</b>. This site cannot read your inbox.</p><p style="font-size:13px"><a href="#" id="back">← Back</a></p></div>`;
-  $('#back').onclick = e => { e.preventDefault(); renderChooser(); };
-  $('#app a[href="/auth/google"]').onclick = () => { if (!sessionStorage.getItem('after')) sessionStorage.setItem('after', 'send'); };
+    <p style="font-size:12px;margin-top:16px">Google will ask permission to <b>send email on your behalf</b>. This site cannot read your inbox.</p></div>`;
 }
 function renderMain() {
-  LEADS_RO = false;
   $('#app').innerHTML = `
-  <header><h1>WattMatch Sender</h1><span class="who">${esc(ME.email)} · <span id="cnt">${ME.sentToday}</span>/${ME.dailyLimit} sent in last 24h</span><button id="home">Home</button><button id="help">How to use</button><button id="out">Sign out</button></header>
+  <header><h1>WattMatch Sender</h1><span class="who">${esc(ME.email)} · <span id="cnt">${ME.sentToday}</span>/${ME.dailyLimit} sent in last 24h</span><button id="help">How to use</button><button id="out">Sign out</button></header>
   <main>
-   <div class="tabs"><button id="t1" class="on">Send emails</button><button id="t2">Team sent log</button><button id="t3">LinkedIn leads<span id="newbadge"></span></button></div>
+   <div class="tabs"><button id="t1" class="on">Send emails</button><button id="t2">Team sent log</button></div>
    <div id="pg1">
     <div class="chk" id="chk"></div>
     <div class="card"><h2>1. Your signature</h2><p class="hint">Added at the end of every email you send. Saved for you only.</p>
@@ -184,16 +147,10 @@ function renderMain() {
       <div class="bar"><i id="barfill"></i></div><div id="runmsg" class="hint" style="margin-top:8px"></div></div>
    </div>
    <div id="pg2" style="display:none"><div class="card"><div class="row" style="margin:0 0 10px"><label style="margin:0"><input type="checkbox" id="mine"> only mine</label><a href="/api/log.xlsx"><button>Download Excel</button></a></div><div id="logtbl" class="tablewrap"></div></div></div>
-  <div id="pg3" style="display:none"><div class="card"><h2>LinkedIn leads</h2><p class="hint">New lead-form submissions appear here automatically. Mark who is handling each one and update the status as you go.</p>
-      <div class="row" style="margin:0 0 10px"><select id="lstatus"></select><button id="lrefresh">Refresh</button><a href="/api/leads.xlsx"><button>Download Excel</button></a><button class="primary" id="luse">Use selected in Send emails</button><small class="m" id="lmsg"></small></div>
-      <div id="ltbl" class="tablewrap"></div></div></div>
   </main>`;
   $('#help').onclick = () => openGuide(0);
-  $('#home').onclick = renderChooser;
   $('#out').onclick = async () => { await api('/auth/logout', { method: 'POST' }); location.href = '/'; };
-  $('#t1').onclick = () => tab(1); $('#t2').onclick = () => { tab(2); loadLog(); }; $('#t3').onclick = () => { tab(3); loadLeads(); };
-  $('#lstatus').onchange = loadLeads; $('#lrefresh').onclick = loadLeads; $('#luse').onclick = useLeads; loadLeads(true);
-  startLeadTimer();
+  $('#t1').onclick = () => tab(1); $('#t2').onclick = () => { tab(2); loadLog(); };
   $('#mine').onchange = loadLog;
   $('#savesig').onclick = async () => { await api('/api/profile', { method: 'PUT', body: { name: $('#sn').value, title: $('#st').value, phone: $('#sp').value } }); ME.sig = { ...ME.sig, name: $('#sn').value, title: $('#st').value, phone: $('#sp').value }; $('#sigmsg').textContent = 'Saved'; preview(); updateChecklist(); };
   $('#savetpl').onclick = async () => { try { await api('/api/template', { method: 'PUT', body: { subject: $('#subj').value, body: $('#body').value } }); $('#tplmsg').textContent = 'Saved'; preview(); } catch (e) { $('#tplmsg').textContent = e.message; } };
@@ -208,69 +165,20 @@ function renderMain() {
   $('#test').onclick = testSend; updateChecklist(); if (!ME.onboarded) openGuide(0, true);
    $('#go').onclick = runSend; $('#stop').onclick = () => { RUN.stop = true; $('#stop').disabled = true; };
 }
-function tab(n) { [1, 2, 3].forEach(k => { $('#pg' + k).style.display = n === k ? '' : 'none'; $('#t' + k).classList.toggle('on', n === k); }); }
+function tab(n) { $('#pg1').style.display = n === 1 ? '' : 'none'; $('#pg2').style.display = n === 2 ? '' : 'none'; $('#t1').classList.toggle('on', n === 1); $('#t2').classList.toggle('on', n === 2); }
 function debounce(f, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => f(...a), ms); }; }
 
 async function uploadFile(f) {
   const fd = new FormData(); fd.append('file', f);
   $('#drop').textContent = 'Reading ' + f.name + '…';
   try {
-    loadRows(await api('/api/upload', { method: 'POST', body: fd }), f.name);
+    const r = await api('/api/upload', { method: 'POST', body: fd });
+    ROWS = r.rows; SEL = new Set(); CURRENT = 0;
+    ROWS.forEach((x, i) => { x.status = x.issues.length ? 'issue' : x.contacted && x.contacted.level === 'email' ? 'dup' : 'ready'; if (x.status === 'ready') SEL.add(i); });
+    $('#drop').textContent = `${f.name} · ${ROWS.length} rows. Click to choose another file.`;
+    $('#mapinfo').innerHTML = (r.warnings.map(w => `<div class="msg">${esc(w)}</div>`).join('')) + `Sheet “${esc(r.sheet)}”. Read: ` + Object.entries(r.mapping).map(([k, v]) => `${k} ← ${esc(v)}`).join(' · ');
+    drawTable(); $('#sendcard').style.display = ROWS.length ? '' : 'none'; preview(); updateChecklist();
   } catch (e) { $('#drop').textContent = e.message; }
-}
-function loadRows(r, label) {
-  ROWS = r.rows; SEL = new Set(); CURRENT = 0;
-  ROWS.forEach((x, i) => { x.status = x.issues.length ? 'issue' : x.contacted && x.contacted.level === 'email' ? 'dup' : 'ready'; if (x.status === 'ready') SEL.add(i); });
-  $('#drop').textContent = `${label} · ${ROWS.length} rows. Click to choose another file.`;
-  $('#mapinfo').innerHTML = (r.warnings.map(w => `<div class="msg">${esc(w)}</div>`).join('')) + `Sheet “${esc(r.sheet)}”. Read: ` + Object.entries(r.mapping).map(([k, v]) => `${k} ← ${esc(v)}`).join(' · ');
-  drawTable(); $('#sendcard').style.display = ROWS.length ? '' : 'none'; preview(); updateChecklist();
-}
-
-/* ---------- LinkedIn leads ---------- */
-let LEADS = [], LEADS_RO = false;
-const STLABEL = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', meeting: 'Meeting booked', not_interested: 'Not interested' };
-async function loadLeads(quiet, badgeOnly) {
-  try {
-    const sel = $('#lstatus');
-    const r = await api('/api/leads' + (sel && sel.value && !badgeOnly ? '?status=' + sel.value : ''));
-    const total = r.counts.reduce((a, c) => a + c.n, 0), nNew = (r.counts.find(c => c.status === 'new') || { n: 0 }).n;
-    if ($('#newbadge')) $('#newbadge').textContent = nNew ? ` (${nNew} new)` : '';
-    if (badgeOnly) return;
-    if (sel) { const html = `<option value="">All statuses (${total})</option>` + r.statuses.map(s => `<option value="${s}">${STLABEL[s]} (${(r.counts.find(c => c.status === s) || { n: 0 }).n})</option>`).join(''); if (sel.dataset.sig !== html) { const cur = sel.value; sel.innerHTML = html; sel.value = cur; sel.dataset.sig = html; } }
-    LEADS = r.rows; drawLeads();
-  } catch (e) {
-    if (e.data && e.data.needCode && !badgeOnly) return askCode();
-    if (!quiet && $('#lmsg')) $('#lmsg').textContent = e.message;
-  }
-}
-function askCode() {
-  clearInterval(LTIMER);
-  $('#ltbl').innerHTML = `<div style="padding:18px"><p class="hint">Enter the team access code to view the leads.</p><div class="row"><input type="text" id="lcode" placeholder="Access code" style="max-width:240px"><button class="primary" id="lunlock">View leads</button><small class="m" id="lcmsg"></small></div></div>`;
-  const go = async () => { try { await api('/api/leads/unlock', { method: 'POST', body: { code: $('#lcode').value } }); loadLeads(); startLeadTimer(); } catch (e) { $('#lcmsg').textContent = e.message; } };
-  $('#lunlock').onclick = go; $('#lcode').onkeydown = e => { if (e.key === 'Enter') go(); };
-}
-function drawLeads() {
-  const ro = LEADS_RO;
-  const head = `<tr>${ro ? '' : '<th></th>'}<th>Received (UTC)</th><th>Contact</th><th>Company</th><th>Form answers</th><th>Status</th><th>${ro ? 'Owner' : 'Mine'}</th><th>Notes</th></tr>`;
-  const rowHtml = l => `<tr data-id="${l.id}">${ro ? '' : '<td><input type="checkbox" class="lsel"></td>'}<td>${esc(l.created_at)}</td>
-    <td>${esc(l.name) || '<small class="m">no name</small>'}<br><small class="m">${esc(l.title)}</small><br>${esc(l.email)}${l.phone ? '<br><small class="m">' + esc(l.phone) + '</small>' : ''}${l.emailed ? '<br><span class="badge b-warn">Already emailed</span>' : ''}</td>
-    <td>${esc(l.company)}</td><td><small>Bill: ${esc(l.monthly_bill) || '-'}<br>RE share: ${esc(l.re_share) || '-'}<br>Timeline: ${esc(l.timeline) || '-'}</small></td>
-    <td>${ro ? `<span class="badge">${esc(STLABEL[l.status] || l.status)}</span>` : `<select class="lst">${Object.entries(STLABEL).map(([k, v]) => `<option value="${k}" ${l.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`}</td>
-    <td>${ro ? `<small class="m">${esc((l.owner || '').split('@')[0]) || '-'}</small>` : `<input type="checkbox" class="lown" ${l.owner ? 'checked' : ''} title="${esc(l.owner || 'Nobody yet')}"><br><small class="m">${esc((l.owner || '').split('@')[0])}</small>`}</td>
-    <td>${ro ? esc(l.notes) : `<input type="text" class="lnote" value="${esc(l.notes)}" placeholder="Add a note">`}</td></tr>`;
-  $('#ltbl').innerHTML = `<table><thead>${head}</thead><tbody>${LEADS.map(rowHtml).join('') || `<tr><td colspan="${ro ? 7 : 8}">No leads yet.</td></tr>`}</tbody></table>`;
-  if (ro) return;
-  const save = async (tr, body) => { try { await api('/api/leads/' + tr.dataset.id, { method: 'PUT', body }); $('#lmsg').textContent = 'Saved'; loadLeads(true, true); } catch (e) { $('#lmsg').textContent = e.message; } };
-  $('#ltbl tbody').onchange = e => { const tr = e.target.closest('tr'); if (!tr) return;
-    if (e.target.classList.contains('lst')) save(tr, { status: e.target.value });
-    else if (e.target.classList.contains('lown')) save(tr, { owner: e.target.checked });
-    else if (e.target.classList.contains('lnote')) save(tr, { notes: e.target.value }); };
-}
-async function useLeads() {
-  const ids = [...document.querySelectorAll('#ltbl .lsel:checked')].map(c => +c.closest('tr').dataset.id);
-  if (!ids.length) { $('#lmsg').textContent = 'Tick the leads you want to email first.'; return; }
-  try { loadRows(await api('/api/leads/to-rows', { method: 'POST', body: { ids } }), 'LinkedIn leads'); tab(1); $('#sendcard').scrollIntoView({ behavior: 'smooth' }); }
-  catch (e) { $('#lmsg').textContent = e.message; }
 }
 function badge(x) {
   if (x.status === 'sent') return '<span class="badge b-ready">Sent</span>';
