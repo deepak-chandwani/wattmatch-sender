@@ -19,6 +19,10 @@ const MailComposer = require('nodemailer/lib/mail-composer');
 const L = require('./lib');
 
 const env = process.env;
+// Tidy pasted values: strip spaces, line breaks, quotes and an accidental "NAME=" prefix
+for (const k of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'SESSION_SECRET', 'TOKEN_KEY', 'BASE_URL', 'ALLOWED_DOMAIN', 'ALLOWED_EMAILS', 'TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN', 'DEFAULT_CC']) {
+  if (env[k] != null) env[k] = String(env[k]).trim().replace(new RegExp('^' + k + '\\s*=\\s*'), '').replace(/^["']+|["']+$/g, '').trim();
+}
 const PORT = +env.PORT || 3000;
 const BASE_URL = (env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const DAILY_LIMIT = +env.DAILY_LIMIT || 400;
@@ -28,19 +32,28 @@ const ALLOWED_DOMAIN = (env.ALLOWED_DOMAIN || '').toLowerCase().replace(/^@/, ''
 const DEFAULT_CC = (env.DEFAULT_CC || 'enquiries@wattmatch.in').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
 const WEBSITE = env.SIGNATURE_WEBSITE || 'https://www.wattmatch.in/';
 
-for (const k of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'SESSION_SECRET', 'TOKEN_KEY']) {
-  if (!env[k]) { console.error(`Missing ${k}. Copy .env.example to .env and fill it in (see README).`); process.exit(1); }
+const problems = [];
+for (const k of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'SESSION_SECRET', 'TOKEN_KEY']) if (!env[k]) problems.push(`Missing ${k}.`);
+if (env.TOKEN_KEY && !/^[0-9a-fA-F]{64}$/.test(env.TOKEN_KEY)) problems.push(`TOKEN_KEY must be exactly 64 characters of 0-9 and a-f. The value set is ${env.TOKEN_KEY.length} characters long${/[^0-9a-fA-F]/.test(env.TOKEN_KEY) ? ' and contains other characters' : ''}.`);
+if (process.env.VERCEL && !env.TURSO_DATABASE_URL) problems.push('Missing TURSO_DATABASE_URL (required on Vercel, which has no disk).');
+if (process.env.VERCEL && env.TURSO_DATABASE_URL && !env.TURSO_AUTH_TOKEN) problems.push('Missing TURSO_AUTH_TOKEN.');
+if (process.env.VERCEL && !/^https:\/\//.test(env.BASE_URL || '')) problems.push('BASE_URL must be set to your Vercel address, e.g. https://wattmatch-sender.vercel.app');
+if (problems.length) {
+  const msg = 'Setup problem - fix these Environment Variables, then redeploy:\n\n- ' + problems.join('\n- ');
+  console.error(msg);
+  // On Vercel, show the problem on the page instead of crashing with a bare 500 error
+  if (process.env.VERCEL) { module.exports = (req, res) => { res.statusCode = 500; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.end(msg); }; return; }
+  process.exit(1);
 }
 const KEY = Buffer.from(env.TOKEN_KEY, 'hex');
-if (KEY.length !== 32) { console.error('TOKEN_KEY must be 64 hex characters (32 bytes).'); process.exit(1); }
 
 /* ---------- database ---------- */
 /* Database: a free Turso cloud database (set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN) or, if those are
    not set, a local SQLite file at DB_PATH (fine on your own computer or a server with a disk). */
 const DB_PATH = env.DB_PATH || path.join(__dirname, 'data', 'sender.db');
 let client;
-if (env.TURSO_DATABASE_URL) client = createClient({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN });
-else if (process.env.VERCEL) throw new Error('On Vercel you must set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (Vercel has no disk).');
+let clientErr = null;
+if (env.TURSO_DATABASE_URL) { try { client = createClient({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN }); } catch (e) { clientErr = new Error('TURSO_DATABASE_URL looks wrong (it should start with libsql://): ' + e.message); } }
 else { fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); client = createClient({ url: 'file:' + DB_PATH }); }
 const rowsOf = r => r.rows.map(row => Object.fromEntries(r.columns.map(c => [c, row[c]])));
 const db = { prepare: sql => ({
@@ -49,6 +62,7 @@ const db = { prepare: sql => ({
   run: async (...a) => { await client.execute({ sql, args: a }); }
 }) };
 const dbReady = (async () => {
+  if (clientErr) throw clientErr;
   await client.executeMultiple(`
 CREATE TABLE IF NOT EXISTS users (
   email TEXT PRIMARY KEY, google_name TEXT, token TEXT,
