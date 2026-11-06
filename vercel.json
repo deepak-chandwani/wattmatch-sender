@@ -1,7 +1,9 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
   "functions": {
-    "api/index.js": { "maxDuration": 60, "includeFiles": "{public/**,lib.js}" }
+    "api/index.js": {
+      "includeFiles": "{public/**,lib.js,index.html}",
+      "maxDuration": 30
+    }
   },
-  "crons": [{ "path": "/api/cron/leads-digest", "schedule": "30 2 * * *" }]
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
 }
